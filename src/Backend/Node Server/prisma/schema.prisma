@@ -1,0 +1,62 @@
+// Prisma schema — heatmap-only slice
+// Requires PostGIS extension enabled on your Postgres DB:
+//   CREATE EXTENSION IF NOT EXISTS postgis;
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// One row per district (or grid cell later) — this is what powers the heatmap.
+// NOTE ON DATA REALNESS: every District row holds DEMO/PLACEHOLDER data.
+// The only real, model-computed scores in this system live on City rows
+// (see below) for the two pilot cities — Aizawl and Shillong.
+model District {
+  id          Int      @id @default(autoincrement())
+  name        String
+  state       String
+  // Geometry stored as GeoJSON text for now (simplest path to ship the heatmap fast).
+  // Prisma doesn't have native PostGIS geometry support, so we store the boundary
+  // as a GeoJSON string and parse it in the controller. Good enough for MVP.
+  boundaryGeoJson String  @map("boundary_geojson")
+  // Center point, used for simpler marker-based heatmaps if you skip polygons
+  centerLat   Float    @map("center_lat")
+  centerLng   Float    @map("center_lng")
+
+  riskScore   Float     @default(0) @map("risk_score") // 0-100, DEMO data for all districts
+  riskLevel   String    @default("low") @map("risk_level") // low | medium | high | severe
+  confidence  Float?    // 0-1, model confidence — null for demo districts
+  computedAt  DateTime? @map("computed_at") // when AIML's model actually produced this score (not row-update time)
+  lastUpdated DateTime  @default(now()) @updatedAt @map("last_updated")
+
+  cities      City[]
+
+  @@map("districts")
+}
+
+// City-level detail — ONLY populated for the pilot cities with a real
+// AIML model behind them (currently Aizawl and Shillong). A district with
+// no city rows just stays at district-level detail on the map; that's
+// expected, not a bug.
+model City {
+  id          Int      @id @default(autoincrement())
+  districtId  Int      @map("district_id")
+  district    District @relation(fields: [districtId], references: [id])
+
+  name        String
+  boundaryGeoJson String @map("boundary_geojson")
+  centerLat   Float    @map("center_lat")
+  centerLng   Float    @map("center_lng")
+
+  riskScore   Float     @default(0) @map("risk_score") // 0-100, REAL model output for pilot cities
+  riskLevel   String    @default("low") @map("risk_level")
+  confidence  Float?
+  computedAt  DateTime? @map("computed_at")
+  lastUpdated DateTime  @default(now()) @updatedAt @map("last_updated")
+
+  @@map("cities")
+}
