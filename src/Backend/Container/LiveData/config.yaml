@@ -1,0 +1,51 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Landslide Risk Monitoring — Data Pipeline Configuration
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Which region to pull data for (must match a key under 'regions')
+active_region: shillong
+
+# ── Region Definitions ────────────────────────────────────────────────────────
+# Each region defines a bounding box and grid resolution.
+# Switch active_region above to change the target area.
+regions:
+  shillong:
+    name: "Shillong, Meghalaya"
+    bbox:
+      min_lat: 25.20
+      max_lat: 25.75
+      min_lon: 91.55
+      max_lon: 92.05
+    grid_resolution_km: 1.0
+
+  aizawl:
+    name: "Aizawl, Mizoram"
+    bbox:
+      min_lat: 23.55
+      max_lat: 23.95
+      min_lon: 92.55
+      max_lon: 92.85
+    grid_resolution_km: 1.0
+
+# ── Google Earth Engine ───────────────────────────────────────────────────────
+gee:
+  project_id: "YOUR_GEE_PROJECT_ID"
+  # For service account auth (unattended runs), uncomment and set:
+  # credentials_path: "path/to/service-account-key.json"
+
+# ── Schedule ──────────────────────────────────────────────────────────────────
+schedule:
+  timezone: "Asia/Kolkata"
+  interval_hours: 4            # 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 IST
+  periodic_refresh_days: 7     # Tier 2 (NDVI, vegetation) refresh interval
+
+# ── Earthquake API ────────────────────────────────────────────────────────────
+earthquake:
+  min_magnitude: 2.5
+  lookback_days: 90
+  max_radius_km: 200
+
+# ── Output ────────────────────────────────────────────────────────────────────
+output:
+  directory: "data"
+  filename: "output.csv"
