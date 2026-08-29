@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { MapContainer ,TileLayer, useMap, GeoJSON } from "react-leaflet";
+import { MapContainer ,TileLayer, useMap, GeoJSON, useMapEvents, Marker } from "react-leaflet";
 
 import L from "leaflet";
 
@@ -8,10 +8,29 @@ import "leaflet/dist/leaflet.css";
 import "leaflet-control-geocoder";
 import "leaflet-control-geocoder/dist/Control.Geocoder.css";
 
-import {featureCollection, polygon, union, difference} from "@turf/turf";
+import {featureCollection, polygon, union, difference, point, booleanPointInPolygon} from "@turf/turf";
 
 import "./heatmap.css"
 
+function EventClickHandler({  nerDists,  setSelectedDistrict,  setSelectedPoint}) {
+
+  useMapEvents({
+    click(e) {
+
+      const { lat, lng } = e.latlng;
+      const clickedPoint = point([lng, lat]);
+      const district = nerDists.features.find(feature =>
+        booleanPointInPolygon(clickedPoint, feature)
+      );
+
+      if (district) {
+        setSelectedDistrict(district.properties);
+        setSelectedPoint([lat, lng]);
+      }
+    }
+  });
+  return null;
+}
 
 function Geocoder() {
   const map = useMap();
@@ -33,6 +52,9 @@ function Geocoder() {
 function Heatmap() {
   const [nerDists, setnerDists] = useState(null);
   const [outsideNER, setOutsideNER] = useState(null);
+
+  const [selectedDistrict, setSelectedDistrict] = useState(null);
+  const [selectedPoint, setSelectedPoint] = useState(null);
 
   useEffect(() => {
     fetch("/ner_districts.geojson")
@@ -71,11 +93,12 @@ function Heatmap() {
   return (
     <div className="map-container">
       <MapContainer
-        center={[26, 91]}
-        zoom={10}
+        center={[26.11667, 92.86667]}
+        zoom={7}
+        minZoom={6}
         maxBounds={[
-          [6, 68],
-          [37, 98]
+          [21, 88],
+          [30, 98]
         ]}
         maxBoundsViscosity={1.0}
         style={{
@@ -116,30 +139,46 @@ function Heatmap() {
           />
         )}
 
+        {nerDists && (
+          <EventClickHandler
+            nerDists={nerDists}
+            setSelectedDistrict={setSelectedDistrict}
+            setSelectedPoint={setSelectedPoint}
+          />
+        )}
+
+        {selectedPoint && (
+          <Marker position={selectedPoint} />
+        )}
+
         <Geocoder />
       </MapContainer>
 
-      <div className="risk-panel">
-        <div className="district-info">
-          <h2>Aizwal</h2>
-          <p>Mizoram</p>
-        </div>
-        
-        <div className="risk-info">
-          <span>Risk Score </span>
-          <strong>82.9/100</strong>
-        </div>
+      {selectedDistrict && (
+        <div className="risk-panel">
 
-        <div>
-          <span>Rainfall </span>
-          <strong>142 mm</strong>
-        </div>
+          <div className="district-info">
+            <h2>{selectedDistrict.DISTRICT}</h2>
+            <p>{selectedDistrict.ST_NM}</p>
+          </div>
 
-        <div>
-          <span>Last Updated: </span>
-          <strong>2 mins ago</strong>
+          <div className="risk-info">
+            <span>Risk Score: </span>
+            <strong>82.9/100</strong>
+          </div>
+
+          <div>
+            <span>Rainfall: </span>
+            <strong>142 mm</strong>
+          </div>
+
+          <div>
+            <span>Last Updated: </span>
+            <strong>2 mins ago</strong>
+          </div>
+
         </div>
-      </div>
+      )}
     </div>
   );
 }

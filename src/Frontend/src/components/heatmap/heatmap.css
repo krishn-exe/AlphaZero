@@ -8,6 +8,7 @@
     display:flex;
     justify-content: space-around;
     align-items: center;
+    flex-wrap:wrap;
 
     min-width: 100%;
     
@@ -40,7 +41,7 @@
 
 .risk-info {
     display: flex;
-    gap: 80px;
+    gap: 8px;
 }
 
 .risk-info div {
