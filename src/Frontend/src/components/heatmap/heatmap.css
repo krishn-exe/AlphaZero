@@ -1,0 +1,59 @@
+.map-container{
+    position:relative;
+}
+
+.risk-panel{
+    position:absolute;
+    bottom:20px;
+    display:flex;
+    justify-content: space-around;
+    align-items: center;
+
+    min-width: 100%;
+    
+    /* transform: translateX(-50%);
+    width:90%;
+    min-height: 100px; */
+
+    z-index:1000;
+
+    border:1px solid rgba(255,255,255,0.4);
+    border-radius:20px;
+
+    background: rgba(7, 29, 7, 0.752);
+    backdrop-filter: blur(10px);
+
+    color:white;
+
+    padding:20px;
+    box-sizing: border-box;
+}
+
+.district-info h2 {
+    margin: 0;
+}
+
+.district-info p {
+    margin: 5px 0 0;
+    opacity: 0.7;
+}
+
+.risk-info {
+    display: flex;
+    gap: 80px;
+}
+
+.risk-info div {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.risk-info span {
+    font-size: 14px;
+    opacity: 0.7;
+}
+
+.risk-info strong {
+    font-size: 22px;
+}

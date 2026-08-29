@@ -10,6 +10,8 @@ import "leaflet-control-geocoder/dist/Control.Geocoder.css";
 
 import {featureCollection, polygon, union, difference} from "@turf/turf";
 
+import "./heatmap.css"
+
 
 function Geocoder() {
   const map = useMap();
@@ -67,54 +69,78 @@ function Heatmap() {
   }, []);
 
   return (
-    <MapContainer
-      center={[26, 91]}
-      zoom={10}
-      maxBounds={[
-        [6, 68],
-        [37, 98]
-      ]}
-      maxBoundsViscosity={1.0}
-      style={{
-        height: "100vh",
-        width: "100%"
-      }}
-    >
-      <TileLayer
-        attribution="&copy; OpenStreetMap contributors"
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-
-      <TileLayer
-        attribution="&copy; Esri"
-        url={`https://ibasemaps-api.arcgis.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}?token=${import.meta.env.VITE_ARCGIS_API_KEY}`}
-        opacity={0.6}
-      />
-
-      {outsideNER && (
-        <GeoJSON
-          data={outsideNER}
-          style={{
-            color: "black",
-            weight:1,
-            fillOpacity: 0.8
-          }}
+    <div className="map-container">
+      <MapContainer
+        center={[26, 91]}
+        zoom={10}
+        maxBounds={[
+          [6, 68],
+          [37, 98]
+        ]}
+        maxBoundsViscosity={1.0}
+        style={{
+          height: "100vh",
+          width: "100%"
+        }}
+      >
+        <TileLayer
+          attribution="&copy; OpenStreetMap contributors"
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-      )}
 
-      {nerDists && (
-        <GeoJSON
-          data={nerDists}
-          style={{
-            color: "green",
-            weight: 1,
-            fillOpacity: 0.2
-          }}
+        <TileLayer
+          attribution="&copy; Esri"
+          url={`https://ibasemaps-api.arcgis.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}?token=${import.meta.env.VITE_ARCGIS_API_KEY}`}
+          opacity={0.6}
         />
-      )}
 
-      <Geocoder />
-    </MapContainer>
+        {outsideNER && (
+          <GeoJSON
+            data={outsideNER}
+            style={{
+              color: "black",
+              weight:1,
+              fillOpacity: 0.8
+            }}
+          />
+        )}
+
+        {nerDists && (
+          <GeoJSON
+            data={nerDists}
+            style={{
+              color: "green",
+              weight: 1,
+              fillOpacity: 0.2
+            }}
+          />
+        )}
+
+        <Geocoder />
+      </MapContainer>
+
+      <div className="risk-panel">
+        <div className="district-info">
+          <h2>Aizwal</h2>
+          <p>Mizoram</p>
+        </div>
+        
+        <div className="risk-info">
+          <span>Risk Score </span>
+          <strong>82.9/100</strong>
+        </div>
+
+        <div>
+          <span>Rainfall </span>
+          <strong>142 mm</strong>
+        </div>
+
+        <div>
+          <span>Last Updated: </span>
+          <strong>2 mins ago</strong>
+        </div>
+      </div>
+    </div>
   );
 }
 
