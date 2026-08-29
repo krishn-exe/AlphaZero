@@ -4,12 +4,14 @@
 // import viteLogo from './assets/vite.svg'
 // import './App.css'
 import Heatmap from './components/heatmap/heatmap.jsx'
+import Navbar from './components/Navbar/Navbar.jsx'
 
 function App(){
   return (
-    <div id="heatmap">
+    <>
+    <Navbar/>
       <Heatmap />
-    </div>
+    </>
   )
 }
 
