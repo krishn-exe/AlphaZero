@@ -29,11 +29,11 @@ function Geocoder() {
 
 
 function Heatmap() {
-  const [indianStates, setIndianStates] = useState(null);
+  const [nerDists, setnerDists] = useState(null);
   const [outsideNER, setOutsideNER] = useState(null);
 
   useEffect(() => {
-    fetch("/indianStates.geojson")
+    fetch("/ner_districts.geojson")
       .then(response => {
         if (!response.ok) {
           throw new Error("Failed to fetch GeoJSON");
@@ -42,7 +42,7 @@ function Heatmap() {
         return response.json();
       })
       .then(data => {
-        setIndianStates(data);
+        setnerDists(data);
 
         const ner = featureCollection(data.features);
         const nerUnion = union(ner);
@@ -102,9 +102,9 @@ function Heatmap() {
         />
       )}
 
-      {indianStates && (
+      {nerDists && (
         <GeoJSON
-          data={indianStates}
+          data={nerDists}
           style={{
             color: "green",
             weight: 1,
