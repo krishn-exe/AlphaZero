@@ -9,8 +9,10 @@ import Navbar from './components/Navbar/Navbar.jsx'
 function App(){
   return (
     <>
-    <Navbar/>
-      <Heatmap />
+      <Navbar/>
+      <div className="page-content">
+        <Heatmap />
+      </div>
     </>
   )
 }
