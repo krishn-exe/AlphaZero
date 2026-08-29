@@ -45,6 +45,11 @@ function makeCityBoxAround(lat, lng, delta = 0.08) {
 }
 
 async function main() {
+  const existingCount = await prisma.district.count();
+  if (existingCount > 0) {
+    console.log(`Database already has ${existingCount} districts — skipping seed (safe to re-run, no duplicates created).`);
+    return;
+  }
   console.log(`Seeding ${nerDistricts.length} NER districts (all demo data, real boundaries)...`);
 
   const created = {};
