@@ -69,7 +69,7 @@ function Heatmap() {
   return (
     <MapContainer
       center={[26, 91]}
-      zoom={8}
+      zoom={10}
       maxBounds={[
         [6, 68],
         [37, 98]
