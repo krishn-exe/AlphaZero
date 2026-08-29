@@ -50,7 +50,7 @@ function Navbar() {
           </ul>
 
           <select className="navbar-lang-toggle" defaultValue="english">
-            <option value="english">english</option>
+            <option value="english">English</option>
             <option value="hindi">हिन्दी</option>
             <option value="assamese">অসমীয়া</option>
             <option value="nepali">नेपाली</option>
@@ -62,7 +62,7 @@ function Navbar() {
             🔔
           </button>
 
-          <button className="navbar-admin-login">admin login</button>
+          <button className="navbar-admin-login">Admin login</button>
         </div>
       </nav>
 
@@ -83,7 +83,7 @@ function Navbar() {
           </ul>
 
           <select className="navbar-lang-toggle" defaultValue="english">
-            <option value="english">english</option>
+            <option value="english">English</option>
             <option value="hindi">हिन्दी</option>
             <option value="assamese">অসমীয়া</option>
             <option value="nepali">नेपाली</option>
@@ -95,7 +95,7 @@ function Navbar() {
             🔔
           </button>
 
-          <button className="navbar-admin-login">admin login</button>
+          <button className="navbar-admin-login">Admin login</button>
         </div>
       )}
     </>
