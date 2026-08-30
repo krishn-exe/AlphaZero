@@ -60,7 +60,7 @@
 }
 
 
-.leaflet-control-geocoder {
+/* .leaflet-control-geocoder {
   background: rgba(26, 23, 23, 0.12);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
@@ -76,9 +76,59 @@
   color: white;
   border: none;
   outline: none;
+} */
+
+
+.leaflet-control-zoom {
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+
+.leaflet-control-zoom-in:hover,
+.leaflet-control-zoom-out:hover {
+  background-color: #656567 !important;
+  color: #000000 !important;
 }
 
 .leaflet-control-geocoder {
-  margin-top: 20px !important;
-  margin-left: 20px !important;
+  border: none !important;
+  border-radius: 10px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  background-color: #ffffff !important;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.leaflet-control-geocoder-form input {
+  font-family: inherit;
+  font-size: 14px !important;
+  padding: 8px 12px !important;
+  outline: none !important;
+  color: #1f2937;
+  width: 220px !important;
+}
+
+
+.leaflet-top.leaflet-right {
+  top: 16px;
+  right: 16px;
+}
+
+.leaflet-bottom.leaflet-right {
+  bottom: 24px;
+  right: 16px;
+}
+
+
+.leaflet-top.leaflet-left {
+  top: 16px;
+  right: 16px;
+}
+
+.leaflet-bottom.leaflet-left {
+  bottom: 24px;
+  right: 16px;
 }

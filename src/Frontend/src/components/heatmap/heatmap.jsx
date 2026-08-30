@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, useMap, GeoJSON, Marker } from "react-leaflet";
+import { MapContainer, TileLayer, useMap, GeoJSON, Marker, ZoomControl } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-control-geocoder";
@@ -8,18 +8,19 @@ import "leaflet-control-geocoder/dist/Control.Geocoder.css";
 import { featureCollection, polygon, union, difference } from "@turf/turf";
 import "./heatmap.css";
 
-function Geocoder() {
+function Geocoder({position="topright"}) {
   const map = useMap();
 
   useEffect(() => {
     const control = L.Control.geocoder({
       defaultMarkGeocode: true,
+      position:position,
     }).addTo(map);
 
     return () => {
       map.removeControl(control);
     };
-  }, [map]);
+  }, [map, position]);
 
   return null;
 }
@@ -167,8 +168,8 @@ function Heatmap() {
         )}
 
         {selectedPoint && <Marker position={selectedPoint} />}
-
-        <Geocoder />
+        
+        <Geocoder position="topright" />
       </MapContainer>
 
       {selectedDistrict && (
