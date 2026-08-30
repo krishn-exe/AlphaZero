@@ -6,6 +6,7 @@
 import Navbar from './components/Navbar/Navbar.jsx'
 import HeroSlideshow from './components/HeroSlideshow/HeroSlideshow.jsx'
 import Heatmap from './components/heatmap/heatmap.jsx'
+import SubscribeAlert from './components/subscribeAlert/SubscribeAlert.jsx'
 
 
 function App(){
@@ -19,6 +20,9 @@ function App(){
       <div id="heatmap" className="page-content">
         <Heatmap />
       </div>
+      <div id="alerts">
+  <SubscribeAlert />
+</div>
     </>
   )
 }
