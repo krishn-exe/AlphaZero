@@ -1,81 +1,145 @@
-import { useState } from "react";
-import "./SubscribeAlert.css";
+import { useState } from 'react';
+import './SubscribeAlert.css';
 
-const DISTRICTS = [
-  { id: null, name: "All Northeast India districts" },
-  { id: 1, name: "Kamrup (Assam)" },
-  { id: 2, name: "Khasi Hills (Meghalaya)" },
-  { id: 3, name: "Imphal West (Manipur)" },
-  { id: 4, name: "West Tripura (Tripura)" },
-  { id: 5, name: "Aizawl (Mizoram)" },
+const API_BASE_URL = 'https://land-slide-sih26.onrender.com';
+
+const districts = [
+  'Guwahati',
+  'Shillong',
+  'Itanagar',
+  'Imphal',
+  'Aizawl',
+  // TODO: replace with full ~130 district list from backend teammate (districts.json)
 ];
 
 function SubscribeAlert() {
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [districtId, setDistrictId] = useState(null);
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [district, setDistrict] = useState('');
   const [showExtra, setShowExtra] = useState(false);
+  const [status, setStatus] = useState('idle'); // idle | loading | success | error
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log({ email, phone, districtId });
+
+    if (!email) {
+      setStatus('error');
+      setErrorMessage('Email is required.');
+      return;
+    }
+
+    setStatus('loading');
+    setErrorMessage('');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/subscribe`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          phone: phone || null,
+          district: district || null,
+        }),
+      });
+
+      if (response.status === 201) {
+        setStatus('success');
+        setEmail('');
+        setPhone('');
+        setDistrict('');
+        setShowExtra(false);
+      } else if (response.status === 429) {
+        setStatus('error');
+        setErrorMessage('Too many attempts. Please try again in a bit.');
+      } else {
+        const data = await response.json().catch(() => ({}));
+        setStatus('error');
+        setErrorMessage(data.error || 'Something went wrong. Please try again.');
+      }
+    } catch (err) {
+      console.error('Network error:', err);
+      setStatus('error');
+      setErrorMessage('Network error. Please check your connection.');
+    }
   };
+
+  if (status === 'success') {
+    return (
+      <div className="subscribe-card">
+        <div className="subscribe-success">
+          <span className="success-check">✓</span>
+          <span>Subscribed! Check your email for confirmation.</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="subscribe-card">
       <div className="subscribe-header">
-        <span className="subscribe-icon" aria-hidden="true">
-          🔔
-        </span>
-        <h3>Get Early Warnings</h3>
+        <span className="subscribe-icon">🔔</span>
+        <h3>Get Landslide Alerts</h3>
       </div>
-
       <p className="subscribe-subtext">
-        Subscribe to get alerts. Stay informed about landslide risk in your
-        area.
+        Stay informed about landslide risk in your district.
       </p>
 
-      <form className="subscribe-form" onSubmit={handleSubmit}>
+      <form className="subscribe-form" onSubmit={handleSubmit} noValidate>
         <div className="subscribe-row">
           <input
             type="email"
-            placeholder="Enter email"
+            placeholder="Email address *"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
           />
-          <button type="submit">Submit</button>
+          <button type="submit" disabled={status === 'loading'}>
+            {status === 'loading' ? 'Subscribing...' : 'Subscribe'}
+          </button>
         </div>
 
-        <button
-          type="button"
-          className="subscribe-toggle"
-          onClick={() => setShowExtra((prev) => !prev)}
-        >
-          {showExtra ? "Hide extra options" : "Add phone or pick a district"}
-        </button>
+        {!showExtra && (
+          <button
+            type="button"
+            className="subscribe-toggle"
+            onClick={() => setShowExtra(true)}
+          >
+            + Add phone number or district (optional)
+          </button>
+        )}
 
         {showExtra && (
           <div className="subscribe-extra">
-            <input
-              type="tel"
-              placeholder="Phone (optional)"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
+           <input
+  type="tel"
+  placeholder="Phone number (optional)"
+  value={phone}
+  onChange={(e) => {
+    const digitsOnly = e.target.value.replace(/\D/g, '');
+    setPhone(digitsOnly.slice(0, 10)); // caps at 10 digits
+  }}
+  inputMode="numeric"
+  maxLength={10}
+/>
             <select
-              value={districtId ?? ""}
-              onChange={(e) =>
-                setDistrictId(e.target.value ? Number(e.target.value) : null)
-              }
+              value={district}
+              onChange={(e) => setDistrict(e.target.value)}
             >
-              {DISTRICTS.map((d) => (
-                <option key={d.name} value={d.id ?? ""}>
-                  {d.name}
+              <option value="">Select district (optional)</option>
+              {districts.map((d) => (
+                <option key={d} value={d}>
+                  {d}
                 </option>
               ))}
             </select>
           </div>
+        )}
+
+        {status === 'error' && (
+          <p className="subscribe-error">⚠️ {errorMessage}</p>
         )}
       </form>
     </div>
