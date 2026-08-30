@@ -1,14 +1,24 @@
 import { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import './Navbar.css';
 import NavMenuContent from './NavMenuContent';
 
 function Navbar() {
   const [activeSection, setActiveSection] = useState('home');
   const [menuOpen, setMenuOpen] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const scrollToSection = (sectionId) => {
     setActiveSection(sectionId);
-    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth' });
+    if (location.pathname !== '/') {
+      navigate('/');
+      setTimeout(() => {
+        document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    } else {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth' });
+    }
     setMenuOpen(false);
   };
 
@@ -22,7 +32,7 @@ function Navbar() {
   return (
     <>
       <nav className="navbar">
-        <div className="navbar-logo">
+        <div className="navbar-logo" onClick={() => { navigate('/'); scrollToSection('home'); }} style={{ cursor: 'pointer' }}>
           <span className="navbar-brand">AlphaZero</span>
         </div>
 

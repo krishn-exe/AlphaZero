@@ -1,0 +1,120 @@
+.report-cta-container {
+  /* No wrapper styling needed, letting the card manage its own sizing */
+}
+
+.report-cta-layout {
+  background-color: #0b1120;
+  box-sizing: border-box;
+  
+  /* Match SubscribeAlert size constraints */
+  margin: clamp(0.75rem, 2.5vw, 1.5rem) clamp(1rem, 4vw, 3rem) clamp(1.5rem, 5vw, 3rem);
+  
+  border-radius: 1.25rem;
+  padding: 1.75rem 2rem;
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 40px;
+  align-items: center;
+}
+
+.report-cta-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.citizen-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  color: #fb7185;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.badge-icon {
+  font-size: 16px;
+}
+
+.report-cta-title {
+  font-size: 2.8rem;
+  line-height: 1.15;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 24px 0 16px;
+  letter-spacing: -0.02em;
+}
+
+.report-cta-desc {
+  color: #94a3b8;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  margin-bottom: 32px;
+  max-width: 95%;
+}
+
+.btn-report-action {
+  background-color: #22c55e;
+  color: #064e3b;
+  padding: 14px 24px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  letter-spacing: 0.5px;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.btn-report-action:hover {
+  background-color: #16a34a;
+  transform: translateY(-1px);
+}
+
+.report-cta-right {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.disaster-graphic {
+  width: 100%;
+  max-width: 400px;
+  height: auto;
+  object-fit: contain;
+}
+
+@media (max-width: 1024px) {
+  .report-cta-layout {
+    grid-template-columns: 1fr;
+    gap: 40px;
+    padding: 40px;
+  }
+  
+  .report-cta-title {
+    font-size: 2.5rem;
+  }
+  
+  .report-cta-desc {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .report-cta-layout {
+    padding: 30px 20px;
+  }
+  
+  .report-cta-title {
+    font-size: 2rem;
+  }
+}
