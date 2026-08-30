@@ -60,3 +60,17 @@ model City {
 
   @@map("cities")
 }
+
+// User-reported incidents (landslides, roadblocks, etc.)
+model Incident {
+  id           Int      @id @default(autoincrement())
+  description  String
+  category     String   // e.g. "landslide", "road_blockage", "other"
+  latitude     Float
+  longitude    Float
+  photoUrl     String?  @map("photo_url") // nullable for now
+  status       String   @default("pending") // pending | verified | resolved
+  reportedAt   DateTime @default(now()) @map("reported_at")
+
+  @@map("incidents")
+}
