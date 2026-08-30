@@ -259,6 +259,45 @@ async function updateCityRisk(req, res) {
   }
 }
 
+async function triggerManualAlert(req, res) {
+  try {
+    const { districtId, riskLevel } = req.body;
+    if (!districtId || !riskLevel) {
+      return res.status(400).json({ error: 'districtId and riskLevel are required' });
+    }
+
+    const district = await prisma.district.findUnique({
+      where: { id: parseInt(districtId, 10) }
+    });
+
+    if (!district) {
+      return res.status(404).json({ error: 'District not found' });
+    }
+
+    const subscribers = await prisma.subscriber.findMany({
+      where: {
+        OR: [
+          { districtId: district.id },
+          { districtId: null }
+        ]
+      },
+      select: { email: true }
+    });
+
+    if (subscribers.length > 0) {
+      const emails = subscribers.map(s => s.email);
+      emailService.sendRiskAlertEmail(emails, district.name, riskLevel).catch(err => {
+        console.error('Non-fatal: Failed to send manual risk alerts', err);
+      });
+    }
+
+    res.json({ success: true, alertedCount: subscribers.length });
+  } catch (err) {
+    console.error('triggerManualAlert error:', err);
+    res.status(500).json({ error: 'Failed to trigger manual alert' });
+  }
+}
+
 module.exports = {
   getNationalHeatmap,
   getDistrictDetail,
@@ -266,4 +305,5 @@ module.exports = {
   getDistrictCities,
   updateCityRisk,
   getRiskLevel,
+  triggerManualAlert,
 };
