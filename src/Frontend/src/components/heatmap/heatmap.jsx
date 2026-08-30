@@ -116,6 +116,7 @@ function Heatmap() {
           [30, 98],
         ]}
         maxBoundsViscosity={1.0}
+        scrollWheelZoom={false}
         style={{ height: "70vh", width: "100%" }}
       >
         <TileLayer
