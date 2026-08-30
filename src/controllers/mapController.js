@@ -259,39 +259,42 @@ async function updateCityRisk(req, res) {
   }
 }
 
-async function getTopRiskDistricts(req, res) {
+async function triggerManualAlert(req, res) {
   try {
-    const limit = Math.min(Number(req.query.limit) || 5, 50);
-    const districts = await prisma.district.findMany({
-      orderBy: { riskScore: 'desc' },
-      take: limit,
-      select: {
-        id: true, name: true, state: true,
-        riskScore: true, riskLevel: true, computedAt: true,
+    const { districtId, riskLevel } = req.body;
+    if (!districtId || !riskLevel) {
+      return res.status(400).json({ error: 'districtId and riskLevel are required' });
+    }
+
+    const district = await prisma.district.findUnique({
+      where: { id: parseInt(districtId, 10) }
+    });
+
+    if (!district) {
+      return res.status(404).json({ error: 'District not found' });
+    }
+
+    const subscribers = await prisma.subscriber.findMany({
+      where: {
+        OR: [
+          { districtId: district.id },
+          { districtId: null }
+        ]
       },
-    });
-    res.json(districts);
-  } catch (err) {
-    console.error('getTopRiskDistricts error:', err);
-    res.status(500).json({ error: 'Failed to load top-risk districts' });
-  }
-}
-
-async function getRiskStats(req, res) {
-  try {
-    const grouped = await prisma.district.groupBy({
-      by: ['riskLevel'],
-      _count: { riskLevel: true },
+      select: { email: true }
     });
 
-    const stats = { low: 0, medium: 0, high: 0, severe: 0 };
-    grouped.forEach(g => { stats[g.riskLevel] = g._count.riskLevel; });
-    stats.total = stats.low + stats.medium + stats.high + stats.severe;
+    if (subscribers.length > 0) {
+      const emails = subscribers.map(s => s.email);
+      emailService.sendRiskAlertEmail(emails, district.name, riskLevel).catch(err => {
+        console.error('Non-fatal: Failed to send manual risk alerts', err);
+      });
+    }
 
-    res.json(stats);
+    res.json({ success: true, alertedCount: subscribers.length });
   } catch (err) {
-    console.error('getRiskStats error:', err);
-    res.status(500).json({ error: 'Failed to load risk stats' });
+    console.error('triggerManualAlert error:', err);
+    res.status(500).json({ error: 'Failed to trigger manual alert' });
   }
 }
 
@@ -304,4 +307,5 @@ module.exports = {
   getDistrictCities,
   updateCityRisk,
   getRiskLevel,
+  triggerManualAlert,
 };

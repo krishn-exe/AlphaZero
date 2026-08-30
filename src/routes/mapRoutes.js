@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const checkApiKey = require('../middleware/checkApiKey');
+const checkApiOrAdmin = require('../middleware/checkApiOrAdmin');
+const checkAdminAuth = require('../middleware/checkAdminAuth');
+
 const {
   getNationalHeatmap,
   getTopRiskDistricts,
@@ -9,6 +11,7 @@ const {
   updateDistrictRisk,
   getDistrictCities,
   updateCityRisk,
+  triggerManualAlert,
 } = require('../controllers/mapController');
 
 // Public reads — frontend hits these, no auth needed
@@ -18,8 +21,11 @@ router.get('/stats', getRiskStats);
 router.get('/district/:id', getDistrictDetail);
 router.get('/district/:id/cities', getDistrictCities);
 
-// Writes — only AIML's pipeline should hit these, guarded by shared API key
-router.put('/district/:id/risk', checkApiKey, updateDistrictRisk);
-router.put('/city/:id/risk', checkApiKey, updateCityRisk);
+// Writes — guarded by combined middleware (AIML pipeline or Admin dashboard)
+router.put('/district/:id/risk', checkApiOrAdmin, updateDistrictRisk);
+router.put('/city/:id/risk', checkApiOrAdmin, updateCityRisk);
+
+// Admin manual alert trigger (Dashboard only)
+router.post('/alert', checkAdminAuth, triggerManualAlert);
 
 module.exports = router;
