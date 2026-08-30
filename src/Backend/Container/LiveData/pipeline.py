@@ -57,7 +57,6 @@ IST = ZoneInfo("Asia/Kolkata")
 OUTPUT_COLUMNS = [
     "Latitude",
     "Longitude",
-    "Region",
     "Fetch_Timestamp",
     "Rainfall_mm",
     "Slope_Angle",
@@ -173,13 +172,10 @@ def run_pipeline(config: dict, *, fresh: bool = False) -> pd.DataFrame:
         logger.info(f"Generating combined grid for {len(regions)} region(s) ...")
         grid_df = generate_multi_grid(regions)
         save_grid(grid_df, str(grid_file))
-        logger.info(f"Grid created: {len(grid_df)} total sample points")
-        for name in region_names:
-            n = (grid_df["Region"] == name).sum()
-            logger.info(f"  - {name}: {n} points")
+        logger.info(f"Grid created: {len(grid_df)} total sample points (after overlap dedup)")
     else:
         grid_df = load_grid(str(grid_file))
-        logger.info(f"Grid loaded from cache: {len(grid_df)} points across {grid_df['Region'].nunique()} region(s)")
+        logger.info(f"Grid loaded from cache: {len(grid_df)} points")
 
     # -- Initialise GEE ----------------------------------------------------
     initialize_gee(config["gee"])
@@ -246,7 +242,7 @@ def run_pipeline(config: dict, *, fresh: bool = False) -> pd.DataFrame:
             continue
 
         # Keep only feature columns + grid_idx for the join
-        drop_cols = {"Latitude", "Longitude", "Region"} & set(tier_df.columns)
+        drop_cols = {"Latitude", "Longitude"} & set(tier_df.columns)
         join_df = tier_df.drop(columns=list(drop_cols), errors="ignore")
 
         if "grid_idx" in join_df.columns:
@@ -278,9 +274,6 @@ def run_pipeline(config: dict, *, fresh: bool = False) -> pd.DataFrame:
     logger.info(f"  Rows   : {len(output)}")
     logger.info(f"  Columns: {len(output.columns)}")
     logger.info(f"  Schema : {list(output.columns)}")
-    for name in region_names:
-        n = (output["Region"] == name).sum() if "Region" in output.columns else "?"
-        logger.info(f"  {name}: {n} rows")
 
     # Quick sanity stats
     nan_counts = output.isna().sum()
@@ -382,30 +375,41 @@ def main():
         regions = config["regions"]
         grid_df = generate_multi_grid(regions)
 
+        # Compute per-region counts from individual grids
+        from grid_generator import generate_grid
+        per_region = []
+        for region in regions:
+            g = generate_grid(region["bbox"], region["grid_resolution_km"])
+            per_region.append(g)
+
+        raw_total = sum(len(g) for g in per_region)
+        deduped_total = len(grid_df)
+
         print()
         print("=" * 62)
         print("          Landslide Risk Pipeline -- Dry Run")
         print("=" * 62)
         print(f"  Regions       : {len(regions)}")
-        print(f"  Total points  : {len(grid_df)}")
+        print(f"  Total points  : {deduped_total}", end="")
+        if raw_total != deduped_total:
+            print(f" ({raw_total - deduped_total} overlap duplicates removed)")
+        else:
+            print()
         print(f"  GEE project   : {config['gee']['project_id']}")
         print(f"  Output        : {config['output']['directory']}/{config['output']['filename']}")
         print(f"  Schedule      : every {config['schedule']['interval_hours']}h IST")
         print("-" * 62)
 
-        for i, region in enumerate(regions):
+        for i, (region, g) in enumerate(zip(regions, per_region)):
             name = region.get("name", f"Region {i+1}")
-            n = (grid_df["Region"] == name).sum()
             bbox = region["bbox"]
             res = region["grid_resolution_km"]
-            sub = grid_df[grid_df["Region"] == name]
             print(f"  [{i+1}] {name}")
             print(f"      Bbox       : ({bbox['min_lat']}, {bbox['min_lon']}) to ({bbox['max_lat']}, {bbox['max_lon']})")
             print(f"      Resolution : {res} km")
-            print(f"      Points     : {n}")
-            if len(sub) > 0:
-                print(f"      Lat range  : {sub['Latitude'].min():.4f} -- {sub['Latitude'].max():.4f}")
-                print(f"      Lon range  : {sub['Longitude'].min():.4f} -- {sub['Longitude'].max():.4f}")
+            print(f"      Points     : {len(g)}")
+            print(f"      Lat range  : {g['Latitude'].min():.4f} -- {g['Latitude'].max():.4f}")
+            print(f"      Lon range  : {g['Longitude'].min():.4f} -- {g['Longitude'].max():.4f}")
 
         print("=" * 62)
         print()

@@ -59,8 +59,8 @@ def generate_multi_grid(regions: list[dict]) -> pd.DataFrame:
     """
     Generate grids for N regions and concatenate into a single DataFrame.
 
-    Each row gets a ``Region`` column with the region's name so the
-    frontend / heatmap can distinguish which rectangle a point belongs to.
+    Overlapping rectangles are handled by deduplicating on (Latitude, Longitude)
+    so no grid point appears twice in the output.
 
     Parameters
     ----------
@@ -70,16 +70,25 @@ def generate_multi_grid(regions: list[dict]) -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        Columns: Latitude, Longitude, Region
+        Columns: Latitude, Longitude  (deduplicated)
     """
     frames = []
-    for i, region in enumerate(regions):
-        name = region.get("name", f"Region {i + 1}")
+    for region in regions:
         grid = generate_grid(region["bbox"], region["grid_resolution_km"])
-        grid["Region"] = name
         frames.append(grid)
 
     combined = pd.concat(frames, ignore_index=True)
+
+    # Deduplicate points that fall in overlapping rectangles
+    before = len(combined)
+    combined = combined.drop_duplicates(subset=["Latitude", "Longitude"]).reset_index(drop=True)
+    after = len(combined)
+    if before != after:
+        import logging
+        logging.getLogger(__name__).info(
+            f"Overlap dedup: {before} -> {after} points ({before - after} duplicates removed)"
+        )
+
     return combined
 
 
