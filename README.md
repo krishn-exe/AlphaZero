@@ -76,71 +76,30 @@ change to this slice.
 
 ---
 
-## 🚧 Slice 2 — Report an Incident (PLANNED, not built)
+## ✅ Slice 2 — Report an Incident (DONE)
 
-### What it needs to do
-Let a user submit a report (text description + optional photo +
-location) about something they observed — a landslide, blocked road,
-or other hazard — so authorities can see community-reported incidents
-alongside the AI-predicted risk heatmap.
+### What it does
+Lets a user submit a report (text description + location) about something they observed — a landslide, blocked road, or other hazard — so authorities can see community-reported incidents alongside the AI-predicted risk heatmap.
 
-### Data model (proposed)
-```prisma
-model Incident {
-  id           Int      @id @default(autoincrement())
-  description  String
-  category     String   // e.g. "landslide", "road_blockage", "other"
-  latitude     Float
-  longitude    Float
-  photoUrl     String?  // uploaded image, stored externally (see below)
-  status       String   @default("pending") // pending | verified | resolved
-  reportedAt   DateTime @default(now())
-}
-```
-No `districtId`/`cityId` foreign key planned initially — incidents are
-point locations, not tied to administrative boundaries, though that
-could change if the frontend wants to show incidents nested under a
-district view.
+### Data model
+- **Incident** — point locations containing a description, category, latitude, longitude, and status (`pending` by default). These are not tied to a specific district or city, but act as a separate map layer.
 
-### Endpoints needed
-- `POST /api/incidents` — submit a new report (description, category,
-  lat/lng, optional photo). Public, no auth — anyone can report.
-- `GET /api/incidents` — list all incidents, likely as GeoJSON so it
-  can layer on top of the existing heatmap the same way districts do.
-- `GET /api/incidents/:id` — single incident detail.
-- `PATCH /api/incidents/:id/status` — mark an incident
-  verified/resolved. This one probably needs auth (an admin/authority
-  action), unlike the heatmap's AIML-only auth — worth deciding who
-  can call this before building it.
+### Endpoints
 
-### Open questions to resolve before building
-1. **Photo storage** — the original `.env.example` had AWS S3 config
-   scaffolded but unused. Decide: real S3/Cloudinary upload, or skip
-   photos for the hackathon and just take a description + location?
-   Photo upload adds real complexity (multipart form handling,
-   storage costs, file size limits) for a feature that may not be
-   core to the demo.
-2. **Who can verify/resolve an incident?** No auth/user system exists
-   yet anywhere in this backend. A minimal shared-secret approach
-   (like the AIML key) could work for a hackathon-scoped "admin
-   action," but won't be dressed up as full authentication.
-3. **Does an incident need to show up "inside" a district's data**,
-   or is it a fully separate map layer the frontend adds on top? This
-   affects whether `Incident` needs a `districtId` relation at all.
-4. **Rate limiting / spam** — a fully public POST endpoint with no
-   auth is open to abuse. Even a simple safeguard (e.g. one
-   submission per IP per few minutes) is worth considering before a
-   public demo link goes out.
+| Method | Route | Auth | Purpose |
+|---|---|---|---|
+| POST | `/api/incidents` | none | Submit a new report (rate-limited) |
+| GET | `/api/incidents` | none | List all incidents as a GeoJSON `FeatureCollection` |
+| GET | `/api/incidents/:id` | none | Single incident detail |
+| PATCH | `/api/incidents/:id/status` | `x-api-key` | Admin action: mark an incident verified/resolved |
 
-### Suggested build order (once the above are decided)
-1. `Incident` schema + migration
-2. `POST /api/incidents` (text + location only, no photo yet) — get
-   the simplest version working end-to-end first
-3. `GET /api/incidents` as GeoJSON, matching the heatmap's response
-   shape so frontend can reuse existing map-rendering code
-4. Photo upload, only if time allows and storage is decided
-5. `PATCH /api/incidents/:id/status` with whatever auth approach was
-   chosen
+POST body: `{ "description": "Blocked road", "category": "road_blockage", "latitude": 23.727, "longitude": 92.717 }`
+
+### Open questions resolved
+1. **Photo storage** — Skipped for now to focus on core functionality.
+2. **Who can verify/resolve an incident?** — Protected using the same `x-api-key` shared secret used for the AIML pipeline.
+3. **Data relationship** — Incidents are completely independent point geometries (no `districtId` FK) to easily layer on top of the map.
+4. **Rate limiting** — `express-rate-limit` implemented on the public POST route to prevent spam.
 
 ### Explicitly out of scope for this slice
 SMS/push alerts, incident-to-district linking, moderation dashboard —

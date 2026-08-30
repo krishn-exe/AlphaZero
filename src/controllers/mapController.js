@@ -1,4 +1,5 @@
 const prisma = require('../config/db');
+const emailService = require('../services/emailService');
 
 /**
  * Maps a numeric risk score to a severity band.
@@ -33,6 +34,7 @@ async function getNationalHeatmap(req, res) {
         state: d.state,
         riskScore: d.riskScore,
         riskLevel: d.riskLevel,
+        rainfall: d.rainfall,
         confidence: d.confidence,
         computedAt: d.computedAt,
         lastUpdated: d.lastUpdated,
@@ -82,7 +84,7 @@ async function getDistrictDetail(req, res) {
 async function updateDistrictRisk(req, res) {
   try {
     const { id } = req.params;
-    const { riskScore, confidence, computedAt } = req.body;
+    const { riskScore, confidence, computedAt, rainfall } = req.body;
 
     if (typeof riskScore !== 'number' || riskScore < 0 || riskScore > 100) {
       return res.status(400).json({ error: 'riskScore must be a number between 0 and 100' });
@@ -91,15 +93,52 @@ async function updateDistrictRisk(req, res) {
       return res.status(400).json({ error: 'confidence must be a number between 0 and 1' });
     }
 
+    // Fetch previous risk level to detect escalation
+    const previousDistrict = await prisma.district.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!previousDistrict) {
+      return res.status(404).json({ error: 'District not found' });
+    }
+
+    const newRiskLevel = getRiskLevel(riskScore);
+
     const updated = await prisma.district.update({
       where: { id: Number(id) },
       data: {
         riskScore,
-        riskLevel: getRiskLevel(riskScore),
+        riskLevel: newRiskLevel,
+        rainfall: rainfall !== undefined ? rainfall : undefined,
         confidence: confidence ?? undefined,
         computedAt: computedAt ? new Date(computedAt) : undefined,
       },
     });
+
+    // Stretch Goal: Send real-time alert if risk escalated to high or severe
+    const isEscalation = (newRiskLevel === 'high' || newRiskLevel === 'severe') &&
+                         (previousDistrict.riskLevel !== 'high' && previousDistrict.riskLevel !== 'severe');
+
+    if (isEscalation) {
+      // Find all subscribers for this district OR all NER (districtId = null)
+      const subscribers = await prisma.subscriber.findMany({
+        where: {
+          OR: [
+            { districtId: Number(id) },
+            { districtId: null }
+          ]
+        },
+        select: { email: true }
+      });
+
+      if (subscribers.length > 0) {
+        const emails = subscribers.map(s => s.email);
+        // Fire and forget
+        emailService.sendRiskAlertEmail(emails, updated.name, newRiskLevel).catch(err => {
+            console.error('Non-fatal: Failed to send risk alerts', err);
+        });
+      }
+    }
 
     res.json(updated);
   } catch (err) {
@@ -131,6 +170,7 @@ async function getDistrictCities(req, res) {
         name: c.name,
         riskScore: c.riskScore,
         riskLevel: c.riskLevel,
+        rainfall: c.rainfall,
         confidence: c.confidence,
         computedAt: c.computedAt,
         lastUpdated: c.lastUpdated,
@@ -155,7 +195,7 @@ async function getDistrictCities(req, res) {
 async function updateCityRisk(req, res) {
   try {
     const { id } = req.params;
-    const { riskScore, confidence, computedAt } = req.body;
+    const { riskScore, confidence, computedAt, rainfall } = req.body;
 
     if (typeof riskScore !== 'number' || riskScore < 0 || riskScore > 100) {
       return res.status(400).json({ error: 'riskScore must be a number between 0 and 100' });
@@ -164,15 +204,53 @@ async function updateCityRisk(req, res) {
       return res.status(400).json({ error: 'confidence must be a number between 0 and 1' });
     }
 
+    const previousCity = await prisma.city.findUnique({
+      where: { id: Number(id) },
+      include: { district: true } // Need district name for the email
+    });
+
+    if (!previousCity) {
+      return res.status(404).json({ error: 'City not found' });
+    }
+
+    const newRiskLevel = getRiskLevel(riskScore);
+
     const updated = await prisma.city.update({
       where: { id: Number(id) },
       data: {
         riskScore,
-        riskLevel: getRiskLevel(riskScore),
+        riskLevel: newRiskLevel,
+        rainfall: rainfall !== undefined ? rainfall : undefined,
         confidence: confidence ?? undefined,
         computedAt: computedAt ? new Date(computedAt) : undefined,
       },
     });
+
+    // Check escalation
+    const isEscalation = (newRiskLevel === 'high' || newRiskLevel === 'severe') &&
+                         (previousCity.riskLevel !== 'high' && previousCity.riskLevel !== 'severe');
+
+    if (isEscalation) {
+      // Find all subscribers for this city's parent district OR all NER (districtId = null)
+      const subscribers = await prisma.subscriber.findMany({
+        where: {
+          OR: [
+            { districtId: previousCity.districtId },
+            { districtId: null }
+          ]
+        },
+        select: { email: true }
+      });
+
+      if (subscribers.length > 0) {
+        const emails = subscribers.map(s => s.email);
+        const locationName = `${updated.name} (in ${previousCity.district.name} district)`;
+        // Fire and forget
+        emailService.sendRiskAlertEmail(emails, locationName, newRiskLevel).catch(err => {
+            console.error('Non-fatal: Failed to send risk alerts', err);
+        });
+      }
+    }
 
     res.json(updated);
   } catch (err) {

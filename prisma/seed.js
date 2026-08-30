@@ -31,6 +31,10 @@ function randomDemoScore() {
   return Math.round(Math.random() * 100 * 10) / 10; // float, 0-100, one decimal
 }
 
+function randomRainfall() {
+  return Math.round(Math.random() * 200 * 10) / 10; // float, 0-200 mm
+}
+
 function makeCityBoxAround(lat, lng, delta = 0.08) {
   return JSON.stringify({
     type: 'Polygon',
@@ -55,6 +59,7 @@ async function main() {
   const created = {};
   for (const d of nerDistricts) {
     const score = randomDemoScore();
+    const rainfall = randomRainfall();
     const row = await prisma.district.create({
       data: {
         name: d.name,
@@ -64,6 +69,7 @@ async function main() {
         boundaryGeoJson: JSON.stringify(d.boundaryGeoJson),
         riskScore: score,
         riskLevel: getRiskLevel(score),
+        rainfall: rainfall,
         // confidence / computedAt intentionally left null — demo data, not model output
       },
     });
@@ -88,6 +94,7 @@ async function main() {
         boundaryGeoJson: makeCityBoxAround(23.7271, 92.7176),
         riskScore: 0,
         riskLevel: getRiskLevel(0),
+        rainfall: randomRainfall(),
         // confidence / computedAt stay null until AIML's first real PUT
       },
     });
@@ -101,6 +108,7 @@ async function main() {
         boundaryGeoJson: makeCityBoxAround(25.5788, 91.8933),
         riskScore: 0,
         riskLevel: getRiskLevel(0),
+        rainfall: randomRainfall(),
       },
     });
 
