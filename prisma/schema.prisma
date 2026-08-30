@@ -29,6 +29,7 @@ model District {
 
   riskScore   Float     @default(0) @map("risk_score") // 0-100, DEMO data for all districts
   riskLevel   String    @default("low") @map("risk_level") // low | medium | high | severe
+  rainfall    Float     @default(0) // dummy district-wise rainfall data in mm
   confidence  Float?    // 0-1, model confidence — null for demo districts
   computedAt  DateTime? @map("computed_at") // when AIML's model actually produced this score (not row-update time)
   lastUpdated DateTime  @default(now()) @updatedAt @map("last_updated")
@@ -55,6 +56,7 @@ model City {
 
   riskScore   Float     @default(0) @map("risk_score") // 0-100, REAL model output for pilot cities
   riskLevel   String    @default("low") @map("risk_level")
+  rainfall    Float     @default(0) // dummy city-wise rainfall data in mm
   confidence  Float?
   computedAt  DateTime? @map("computed_at")
   lastUpdated DateTime  @default(now()) @updatedAt @map("last_updated")

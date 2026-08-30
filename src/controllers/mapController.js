@@ -34,6 +34,7 @@ async function getNationalHeatmap(req, res) {
         state: d.state,
         riskScore: d.riskScore,
         riskLevel: d.riskLevel,
+        rainfall: d.rainfall,
         confidence: d.confidence,
         computedAt: d.computedAt,
         lastUpdated: d.lastUpdated,
@@ -83,7 +84,7 @@ async function getDistrictDetail(req, res) {
 async function updateDistrictRisk(req, res) {
   try {
     const { id } = req.params;
-    const { riskScore, confidence, computedAt } = req.body;
+    const { riskScore, confidence, computedAt, rainfall } = req.body;
 
     if (typeof riskScore !== 'number' || riskScore < 0 || riskScore > 100) {
       return res.status(400).json({ error: 'riskScore must be a number between 0 and 100' });
@@ -108,6 +109,7 @@ async function updateDistrictRisk(req, res) {
       data: {
         riskScore,
         riskLevel: newRiskLevel,
+        rainfall: rainfall !== undefined ? rainfall : undefined,
         confidence: confidence ?? undefined,
         computedAt: computedAt ? new Date(computedAt) : undefined,
       },
@@ -168,6 +170,7 @@ async function getDistrictCities(req, res) {
         name: c.name,
         riskScore: c.riskScore,
         riskLevel: c.riskLevel,
+        rainfall: c.rainfall,
         confidence: c.confidence,
         computedAt: c.computedAt,
         lastUpdated: c.lastUpdated,
@@ -192,7 +195,7 @@ async function getDistrictCities(req, res) {
 async function updateCityRisk(req, res) {
   try {
     const { id } = req.params;
-    const { riskScore, confidence, computedAt } = req.body;
+    const { riskScore, confidence, computedAt, rainfall } = req.body;
 
     if (typeof riskScore !== 'number' || riskScore < 0 || riskScore > 100) {
       return res.status(400).json({ error: 'riskScore must be a number between 0 and 100' });
@@ -217,6 +220,7 @@ async function updateCityRisk(req, res) {
       data: {
         riskScore,
         riskLevel: newRiskLevel,
+        rainfall: rainfall !== undefined ? rainfall : undefined,
         confidence: confidence ?? undefined,
         computedAt: computedAt ? new Date(computedAt) : undefined,
       },
