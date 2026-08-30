@@ -23,7 +23,9 @@ router.get('/:id', getIncidentById);
 // Public write endpoints (rate-limited to prevent spam)
 router.post('/', submitLimiter, createIncident);
 
+const checkAdminAuth = require('../middleware/checkAdminAuth');
+
 // Protected admin endpoints
-router.patch('/:id/status', checkApiKey, updateIncidentStatus);
+router.patch('/:id/status', checkAdminAuth, updateIncidentStatus);
 
 module.exports = router;
