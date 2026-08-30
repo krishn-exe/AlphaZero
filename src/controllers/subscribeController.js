@@ -56,7 +56,25 @@ const getSubscriberCount = async (req, res) => {
   }
 };
 
+const getSubscribers = async (req, res) => {
+  try {
+    const subscribers = await prisma.subscriber.findMany({
+      orderBy: { subscribedAt: 'desc' },
+      include: {
+        district: {
+          select: { name: true, state: true }
+        }
+      }
+    });
+    res.json(subscribers);
+  } catch (error) {
+    console.error('Error fetching subscribers:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 module.exports = {
   subscribe,
   getSubscriberCount,
+  getSubscribers,
 };
