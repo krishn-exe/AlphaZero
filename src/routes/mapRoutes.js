@@ -3,6 +3,8 @@ const router = express.Router();
 const checkApiKey = require('../middleware/checkApiKey');
 const {
   getNationalHeatmap,
+  getTopRiskDistricts,
+  getRiskStats,
   getDistrictDetail,
   updateDistrictRisk,
   getDistrictCities,
@@ -11,6 +13,8 @@ const {
 
 // Public reads — frontend hits these, no auth needed
 router.get('/national', getNationalHeatmap);
+router.get('/top-risk', getTopRiskDistricts);
+router.get('/stats', getRiskStats);
 router.get('/district/:id', getDistrictDetail);
 router.get('/district/:id/cities', getDistrictCities);
 
