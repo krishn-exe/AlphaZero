@@ -6,14 +6,19 @@
 import Navbar from './components/Navbar/Navbar.jsx'
 import HeroSlideshow from './components/HeroSlideshow/HeroSlideshow.jsx'
 import Heatmap from './components/heatmap/heatmap.jsx'
+import InfoMax from './components/infoMax/infoMax.jsx'
 
 
 function App(){
   return (
     <>
        <Navbar />
-     <div id="home">
+      <div id="home">
         <HeroSlideshow />
+      </div>
+
+      <div id="info">
+        <InfoMax />
       </div>
 
       <div id="heatmap" className="page-content">
