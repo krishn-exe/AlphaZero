@@ -116,7 +116,7 @@ function Heatmap() {
           [30, 98],
         ]}
         maxBoundsViscosity={1.0}
-        style={{ height: "100vh", width: "100%" }}
+        style={{ height: "70vh", width: "100%" }}
       >
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
