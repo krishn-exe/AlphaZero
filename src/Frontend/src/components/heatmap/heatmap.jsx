@@ -10,25 +10,41 @@ import "leaflet-control-geocoder/dist/Control.Geocoder.css";
 
 import {featureCollection, polygon, union, difference, point, booleanPointInPolygon} from "@turf/turf";
 
-import "./heatmap.css"
+import "./heatmap.css";
 
-function EventClickHandler({  nerDists,  setSelectedDistrict,  setSelectedPoint}) {
-
+function EventClickHandler({
+  nerDists,
+  riskDists,
+  setSelectedDistrict,
+  setSelectedPoint
+}) {
   useMapEvents({
     click(e) {
-
       const { lat, lng } = e.latlng;
+
       const clickedPoint = point([lng, lat]);
-      const district = nerDists.features.find(feature =>
+
+      const district = nerDists.features.find((feature) =>
         booleanPointInPolygon(clickedPoint, feature)
       );
 
       if (district) {
-        setSelectedDistrict(district.properties);
-        setSelectedPoint([lat, lng]);
+        const districtName = district.properties.DISTRICT;
+
+        const riskDistrict = riskDists.features.find(
+          (feature) =>
+            feature.properties.name.toLowerCase() ===
+            districtName.toLowerCase()
+        );
+
+        if (riskDistrict) {
+          setSelectedDistrict(riskDistrict.properties);
+          setSelectedPoint([lat, lng]);
+        }
       }
     }
   });
+
   return null;
 }
 
@@ -51,6 +67,7 @@ function Geocoder() {
 
 function Heatmap() {
   const [nerDists, setnerDists] = useState(null);
+  const [riskDists, setRiskDists] = useState(null);
   const [outsideNER, setOutsideNER] = useState(null);
 
   const [selectedDistrict, setSelectedDistrict] = useState(null);
@@ -87,6 +104,23 @@ function Heatmap() {
       })
       .catch(error => {
         console.error("Error loading GeoJSON:", error);
+      });
+  }, []);
+
+  useEffect(() => {
+    fetch("/dummy-heat.json")
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Failed to fetch dummy heat data");
+        }
+
+        return response.json();
+      })
+      .then((data) => {
+        setRiskDists(data);
+      })
+      .catch((error) => {
+        console.error("Error loading dummy heat data:", error);
       });
   }, []);
 
@@ -133,15 +167,47 @@ function Heatmap() {
             data={nerDists}
             style={{
               color: "green",
-              weight: 1,
-              fillOpacity: 0.2
+              weight: 0,
+              fillOpacity:0
             }}
           />
         )}
 
-        {nerDists && (
+        {riskDists && (
+          <GeoJSON
+            data={riskDists}
+            style={(feature) => {
+              const riskLevel = feature.properties.riskLevel;
+
+              let fillColor;
+
+              if (riskLevel === "low") {
+                fillColor = "green";
+              } else if (riskLevel === "medium") {
+                fillColor = "yellow";
+              } else if (riskLevel === "high") {
+                fillColor = "orange";
+              } else if (riskLevel === "severe") {
+                fillColor = "red";
+              } else {
+                fillColor = "gray";
+              }
+
+              return {
+                color: "black",
+                weight: 1,
+                fillColor: fillColor,
+                fillOpacity: 0.6
+              };
+            }}
+          />
+        )}
+        
+
+        {nerDists && riskDists && (
           <EventClickHandler
             nerDists={nerDists}
+            riskDists={riskDists}
             setSelectedDistrict={setSelectedDistrict}
             setSelectedPoint={setSelectedPoint}
           />
@@ -158,13 +224,18 @@ function Heatmap() {
         <div className="risk-panel">
 
           <div className="district-info">
-            <h2>{selectedDistrict.DISTRICT}</h2>
-            <p>{selectedDistrict.ST_NM}</p>
+            <h2>{selectedDistrict.name}</h2>
+            <p>{selectedDistrict.state}</p>
           </div>
 
           <div className="risk-info">
             <span>Risk Score: </span>
-            <strong>82.9/100</strong>
+            <strong>{selectedDistrict.riskScore}</strong>
+          </div>
+
+          <div>
+            <span>Risk Level: </span>
+            <strong>{selectedDistrict.riskLevel}</strong>
           </div>
 
           <div>
@@ -174,7 +245,7 @@ function Heatmap() {
 
           <div>
             <span>Last Updated: </span>
-            <strong>2 mins ago</strong>
+            <strong>{new Date(selectedDistrict.lastUpdated).toLocaleString()}</strong>
           </div>
 
         </div>
