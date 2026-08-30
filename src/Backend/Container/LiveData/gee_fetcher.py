@@ -36,7 +36,7 @@ GSMAP_PRIMARY = "JAXA/GPM_L3/GSMaP/v8/operational"
 GSMAP_FALLBACK = "JAXA/GPM_L3/GSMaP/v6/operational"
 IMERG_FALLBACK = "NASA/GPM_L3/IMERG_V07"
 
-SMAP_PRIMARY = "NASA/SMAP/SPL4SMGP/007"
+SMAP_PRIMARY = "NASA/SMAP/SPL4SMGP/008"
 SMAP_NASA_USDA = "NASA_USDA/HSL/SMAP10KM_soil_moisture"
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -236,7 +236,7 @@ def fetch_realtime_features(grid_df: pd.DataFrame) -> pd.DataFrame:
     Returned columns
     ----------------
     grid_idx, Latitude, Longitude,
-    Rainfall_mm, Rainfall_3Day, Rainfall_7Day,
+    Rainfall_mm, Rainfall_3Day,
     Soil_Moisture_Content, Soil_Saturation
     """
     logger.info(f"[Tier 3 / Realtime] Sampling {len(grid_df)} points …")
@@ -256,17 +256,16 @@ def fetch_realtime_features(grid_df: pd.DataFrame) -> pd.DataFrame:
 
 def _build_precipitation_image() -> ee.Image:
     """
-    Build a 3-band precipitation image (24 h, 3 d, 7 d cumulative mm).
+    Build a 2-band precipitation image (24 h, 3 d cumulative mm).
 
     Tries GSMaP v8 → GSMaP v6 → IMERG V07, using whichever has data.
     """
     now = datetime.now(timezone.utc)
     end_str = now.strftime("%Y-%m-%dT%H:%M:%S")
 
-    # Date strings for the three rolling windows
+    # Date strings for the rolling windows
     start_24h = (now - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
     start_3d = (now - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%S")
-    start_7d = (now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
 
     # ── Try GSMaP (primary: ~4 h latency) ─────────────────────────────
     for dataset_id, band in [
@@ -275,28 +274,26 @@ def _build_precipitation_image() -> ee.Image:
     ]:
         try:
             col = ee.ImageCollection(dataset_id)
-            # Quick check: does the collection have images in the 7-day window?
-            count = col.filterDate(start_7d, end_str).size().getInfo()
-            if count == 0:
-                logger.info(f"  {dataset_id}: 0 images in 7-day window, trying next …")
-                continue
+            latest = col.sort("system:time_start", False).first()
+            latest_date = latest.date()
+            latest_date_str = latest_date.format("YYYY-MM-dd HH:mm").getInfo()
 
-            logger.info(f"  Using {dataset_id} ({count} images in 7-day window)")
+            end_date = latest_date.advance(1, "hour")
+            start_24h_ee = latest_date.advance(-24, "hour")
+            start_3d_ee = latest_date.advance(-72, "hour")
+
+            logger.info(f"  Using {dataset_id} (latest pass: {latest_date_str})")
 
             # GSMaP hourlyPrecipRateGC is mm/hr; each image = 1 hour → sum = total mm
             rain_24h = (
-                col.filterDate(start_24h, end_str).select(band)
+                col.filterDate(start_24h_ee, end_date).select(band)
                 .sum().rename("Rainfall_mm")
             )
             rain_3d = (
-                col.filterDate(start_3d, end_str).select(band)
+                col.filterDate(start_3d_ee, end_date).select(band)
                 .sum().rename("Rainfall_3Day")
             )
-            rain_7d = (
-                col.filterDate(start_7d, end_str).select(band)
-                .sum().rename("Rainfall_7Day")
-            )
-            return ee.Image.cat([rain_24h, rain_3d, rain_7d])
+            return ee.Image.cat([rain_24h, rain_3d])
 
         except Exception as exc:
             logger.warning(f"  {dataset_id} failed: {exc}")
@@ -315,7 +312,6 @@ def _build_precipitation_image() -> ee.Image:
         end_date = latest_date.advance(1, "day")
         start_24h_ee = latest_date
         start_3d_ee = latest_date.advance(-3, "day")
-        start_7d_ee = latest_date.advance(-7, "day")
 
         logger.info(f"  IMERG latest date: {latest_date.format('YYYY-MM-dd').getInfo()}")
 
@@ -328,11 +324,7 @@ def _build_precipitation_image() -> ee.Image:
             col.filterDate(start_3d_ee, end_date).select(band)
             .sum().multiply(0.5).rename("Rainfall_3Day")
         )
-        rain_7d = (
-            col.filterDate(start_7d_ee, end_date).select(band)
-            .sum().multiply(0.5).rename("Rainfall_7Day")
-        )
-        return ee.Image.cat([rain_24h, rain_3d, rain_7d])
+        return ee.Image.cat([rain_24h, rain_3d])
 
     except Exception as exc:
         logger.error(f"  All precipitation sources failed: {exc}")
@@ -341,7 +333,6 @@ def _build_precipitation_image() -> ee.Image:
         return ee.Image.cat([
             zero.rename("Rainfall_mm"),
             zero.rename("Rainfall_3Day"),
-            zero.rename("Rainfall_7Day"),
         ])
 
 

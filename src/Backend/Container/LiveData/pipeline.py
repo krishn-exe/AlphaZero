@@ -63,7 +63,6 @@ OUTPUT_COLUMNS = [
     "Soil_Saturation",
     "Vegetation_Cover",
     "Rainfall_3Day",
-    "Rainfall_7Day",
     "Aspect",
     "Elevation_m",
     "NDVI_Index",
@@ -258,12 +257,12 @@ def run_pipeline(config: dict, *, fresh: bool = False) -> pd.DataFrame:
     # Add earthquake activity (already aligned by index)
     output["Earthquake_Activity"] = eq_activity.values
 
-    # -- Reorder to match ML schema ----------------------------------------
-    available = [c for c in OUTPUT_COLUMNS if c in output.columns]
-    missing = [c for c in OUTPUT_COLUMNS if c not in output.columns]
-    if missing:
-        logger.warning(f"Missing columns in output: {missing}")
-    output = output[available]
+    # -- Reorder to match ML schema (guarantee all columns present) --------
+    for col in OUTPUT_COLUMNS:
+        if col not in output.columns:
+            logger.warning(f"Column '{col}' was missing from output tiers -- filling with 0.0 default")
+            output[col] = 0.0
+    output = output[OUTPUT_COLUMNS]
 
     # -- Write CSV ---------------------------------------------------------
     out_file = out_dir / config["output"]["filename"]
