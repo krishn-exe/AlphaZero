@@ -259,6 +259,42 @@ async function updateCityRisk(req, res) {
   }
 }
 
+async function getTopRiskDistricts(req, res) {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 5, 50);
+    const districts = await prisma.district.findMany({
+      orderBy: { riskScore: 'desc' },
+      take: limit,
+      select: {
+        id: true, name: true, state: true,
+        riskScore: true, riskLevel: true, computedAt: true,
+      },
+    });
+    res.json(districts);
+  } catch (err) {
+    console.error('getTopRiskDistricts error:', err);
+    res.status(500).json({ error: 'Failed to load top-risk districts' });
+  }
+}
+
+async function getRiskStats(req, res) {
+  try {
+    const grouped = await prisma.district.groupBy({
+      by: ['riskLevel'],
+      _count: { riskLevel: true },
+    });
+
+    const stats = { low: 0, medium: 0, high: 0, severe: 0 };
+    grouped.forEach(g => { stats[g.riskLevel] = g._count.riskLevel; });
+    stats.total = stats.low + stats.medium + stats.high + stats.severe;
+
+    res.json(stats);
+  } catch (err) {
+    console.error('getRiskStats error:', err);
+    res.status(500).json({ error: 'Failed to load risk stats' });
+  }
+}
+
 async function triggerManualAlert(req, res) {
   try {
     const { districtId, riskLevel } = req.body;
