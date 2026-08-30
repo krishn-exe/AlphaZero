@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import './Navbar.css';
+import NavMenuContent from './NavMenuContent';
 
 function Navbar() {
   const [activeSection, setActiveSection] = useState('home');
@@ -36,66 +37,22 @@ function Navbar() {
         </button>
 
         <div className="navbar-right navbar-right-desktop">
-          <ul className="navbar-links">
-            {navItems.map((item) => (
-              <li className="navbar-item" key={item.id}>
-                <button
-                  className={`navbar-link ${activeSection === item.id ? 'navbar-link-active' : ''}`}
-                  onClick={() => scrollToSection(item.id)}
-                >
-                  {item.label}
-                </button>
-              </li>
-            ))}
-          </ul>
-
-          <select className="navbar-lang-toggle" defaultValue="english">
-            <option value="english">English</option>
-            <option value="hindi">हिन्दी</option>
-            <option value="assamese">অসমীয়া</option>
-            <option value="nepali">नेपाली</option>
-            <option value="manipuri">মৈতৈলোন্</option>
-            <option value="bengali">বাংলা</option>
-          </select>
-
-          <button className="navbar-bell" aria-label="notifications">
-            🔔
-          </button>
-
-          <button className="navbar-admin-login">Admin login</button>
+          <NavMenuContent
+            navItems={navItems}
+            activeSection={activeSection}
+            scrollToSection={scrollToSection}
+          />
         </div>
       </nav>
 
       {/* Mobile menu rendered OUTSIDE <nav>, directly under it in the DOM */}
       {menuOpen && (
         <div className="mobile-menu">
-          <ul className="navbar-links">
-            {navItems.map((item) => (
-              <li className="navbar-item" key={item.id}>
-                <button
-                  className={`navbar-link ${activeSection === item.id ? 'navbar-link-active' : ''}`}
-                  onClick={() => scrollToSection(item.id)}
-                >
-                  {item.label}
-                </button>
-              </li>
-            ))}
-          </ul>
-
-          <select className="navbar-lang-toggle" defaultValue="english">
-            <option value="english">English</option>
-            <option value="hindi">हिन्दी</option>
-            <option value="assamese">অসমীয়া</option>
-            <option value="nepali">नेपाली</option>
-            <option value="manipuri">মৈতৈলোন্</option>
-            <option value="bengali">বাংলা</option>
-          </select>
-
-          <button className="navbar-bell" aria-label="notifications">
-            🔔
-          </button>
-
-          <button className="navbar-admin-login">Admin login</button>
+          <NavMenuContent
+            navItems={navItems}
+            activeSection={activeSection}
+            scrollToSection={scrollToSection}
+          />
         </div>
       )}
     </>

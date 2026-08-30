@@ -1,0 +1,187 @@
+.hero-slideshow {
+  position: relative;
+  width: 100%;
+  height: 520px;
+  max-height: 70vh;
+  overflow: hidden;
+}
+
+.hero-slide {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 0.8s ease-in-out;
+}
+
+.hero-slide.active {
+  opacity: 1;
+  z-index: 1;
+}
+
+.hero-overlay {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 60px;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.45), rgba(0,0,0,0.15));
+  box-sizing: border-box;
+}
+
+.hero-title {
+  color: #ffffff;
+  font-size: clamp(1.6rem, 3vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.4;
+  max-width: 700px;
+  margin: 0 0 28px 0;
+}
+
+.hero-cta {
+  background-color: #0b8568;
+  color: #ffffff;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 1.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: fit-content;
+  white-space: nowrap;
+}
+
+.hero-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.4);
+  border: none;
+  color: #ffffff;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 3;
+}
+
+.hero-arrow-left {
+  left: 20px;
+}
+
+.hero-arrow-right {
+  right: 20px;
+}
+
+.hero-dots {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 3;
+}
+
+.hero-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  padding: 0;
+}
+
+.hero-dot.active {
+  background: #ffffff;
+}
+
+/* ---------- Tablet ---------- */
+@media (max-width: 1024px) {
+  .hero-slideshow {
+    height: 460px;
+  }
+
+  .hero-overlay {
+    padding: 0 40px;
+  }
+
+  .hero-title {
+    max-width: 550px;
+  }
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 768px) {
+  .hero-slideshow {
+    height: 400px;
+  }
+
+  .hero-overlay {
+    padding: 0 32px;
+  }
+
+  .hero-title {
+    font-size: clamp(1.3rem, 4vw, 1.8rem);
+    margin-bottom: 20px;
+    max-width: 100%;
+  }
+
+  .hero-arrow {
+    width: 34px;
+    height: 34px;
+  }
+
+  .hero-cta {
+    font-size: 0.9rem;
+    padding: 0.6rem 1.2rem;
+  }
+}
+
+
+@media (max-width: 480px) {
+  .hero-slideshow {
+    height: 340px;
+  }
+
+  .hero-overlay {
+    padding: 0 20px;
+  }
+
+  .hero-title {
+    font-size: clamp(1.1rem, 5vw, 1.4rem);
+    line-height: 1.35;
+    margin-bottom: 16px;
+  }
+
+  .hero-arrow-left {
+    left: 10px;
+  }
+
+  .hero-arrow-right {
+    right: 10px;
+  }
+
+  .hero-dots {
+    bottom: 12px;
+  }
+}
+
+/* ---------- Very small phones ---------- */
+@media (max-width: 360px) {
+  .hero-slideshow {
+    height: 300px;
+  }
+
+  .hero-cta {
+    font-size: 0.85rem;
+    padding: 0.5rem 1rem;
+  }
+}

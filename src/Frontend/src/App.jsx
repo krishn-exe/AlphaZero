@@ -3,14 +3,20 @@
 // import reactLogo from './assets/react.svg'
 // import viteLogo from './assets/vite.svg'
 // import './App.css'
-import Heatmap from './components/heatmap/heatmap.jsx'
 import Navbar from './components/Navbar/Navbar.jsx'
+import HeroSlideshow from './components/HeroSlideshow/HeroSlideshow.jsx'
+import Heatmap from './components/heatmap/heatmap.jsx'
+
 
 function App(){
   return (
     <>
-      <Navbar/>
-      <div className="page-content">
+       <Navbar />
+     <div id="home">
+        <HeroSlideshow />
+      </div>
+
+      <div id="heatmap" className="page-content">
         <Heatmap />
       </div>
     </>
