@@ -7,10 +7,10 @@
   box-sizing: border-box;
   
   /* Match SubscribeAlert size constraints */
-  margin: clamp(0.75rem, 2.5vw, 1.5rem) clamp(1rem, 4vw, 3rem) clamp(1.5rem, 5vw, 3rem);
+  margin: 1.5rem 0.5rem 2rem;
   
   border-radius: 1.25rem;
-  padding: 1.75rem 2rem;
+  padding: 1.25rem 2rem;
   display: grid;
   grid-template-columns: 1fr 1.2fr;
   gap: 40px;
@@ -44,20 +44,13 @@
 }
 
 .report-cta-title {
-  font-size: 2.8rem;
-  line-height: 1.15;
-  font-weight: 700;
-  color: #ffffff;
-  margin: 24px 0 16px;
-  letter-spacing: -0.02em;
+    font-size: 2.2rem;
+    line-height: 1.1;
+    margin: 16px 0 12px;
 }
 
 .report-cta-desc {
-  color: #94a3b8;
-  font-size: 1.05rem;
-  line-height: 1.6;
-  margin-bottom: 32px;
-  max-width: 95%;
+    margin-bottom: 20px;
 }
 
 .btn-report-action {
@@ -81,16 +74,16 @@
 }
 
 .report-cta-right {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
 }
 
 .disaster-graphic {
-  width: 100%;
-  max-width: 400px;
-  height: auto;
-  object-fit: contain;
+    width: 70%;
+    max-width: 280px;
+    height: auto;
+    object-fit: contain;
 }
 
 @media (max-width: 1024px) {
