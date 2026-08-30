@@ -1,59 +1,19 @@
 import { useEffect, useState } from "react";
-
-import { MapContainer ,TileLayer, useMap, GeoJSON, useMapEvents, Marker } from "react-leaflet";
-
+import { MapContainer, TileLayer, useMap, GeoJSON, Marker } from "react-leaflet";
 import L from "leaflet";
-
 import "leaflet/dist/leaflet.css";
 import "leaflet-control-geocoder";
 import "leaflet-control-geocoder/dist/Control.Geocoder.css";
 
-import {featureCollection, polygon, union, difference, point, booleanPointInPolygon} from "@turf/turf";
-
+import { featureCollection, polygon, union, difference } from "@turf/turf";
 import "./heatmap.css";
-
-function EventClickHandler({
-  nerDists,
-  riskDists,
-  setSelectedDistrict,
-  setSelectedPoint
-}) {
-  useMapEvents({
-    click(e) {
-      const { lat, lng } = e.latlng;
-
-      const clickedPoint = point([lng, lat]);
-
-      const district = nerDists.features.find((feature) =>
-        booleanPointInPolygon(clickedPoint, feature)
-      );
-
-      if (district) {
-        const districtName = district.properties.DISTRICT;
-
-        const riskDistrict = riskDists.features.find(
-          (feature) =>
-            feature.properties.name.toLowerCase() ===
-            districtName.toLowerCase()
-        );
-
-        if (riskDistrict) {
-          setSelectedDistrict(riskDistrict.properties);
-          setSelectedPoint([lat, lng]);
-        }
-      }
-    }
-  });
-
-  return null;
-}
 
 function Geocoder() {
   const map = useMap();
 
   useEffect(() => {
     const control = L.Control.geocoder({
-      defaultMarkGeocode: true
+      defaultMarkGeocode: true,
     }).addTo(map);
 
     return () => {
@@ -63,7 +23,6 @@ function Geocoder() {
 
   return null;
 }
-
 
 function Heatmap() {
   const [nerDists, setnerDists] = useState(null);
@@ -75,54 +34,75 @@ function Heatmap() {
 
   useEffect(() => {
     fetch("/ner_districts.geojson")
-      .then(response => {
-        if (!response.ok) {
-          throw new Error("Failed to fetch GeoJSON");
-        }
-
+      .then((response) => {
+        if (!response.ok) throw new Error("Failed to fetch GeoJSON");
         return response.json();
       })
-      .then(data => {
+      .then((data) => {
         setnerDists(data);
 
-        const ner = featureCollection(data.features);
-        const nerUnion = union(ner);
+        try {
+          const ner = featureCollection(data.features);
+          const nerUnion = union(ner);
 
-        const world = polygon([
-          [
-            [-180, -85],
-            [180, -85],
-            [180, 85],
-            [-180, 85],
-            [-180, -85]
-          ]
-        ]);
+          const world = polygon([
+            [
+              [-180, -85],
+              [180, -85],
+              [180, 85],
+              [-180, 85],
+              [-180, -85],
+            ],
+          ]);
 
-        const mask = difference(featureCollection([world, nerUnion]));
+          // Handle Turf v6 / v7 difference API variations safely
+          const mask = difference(
+            featureCollection ? featureCollection([world, nerUnion]) : world,
+            nerUnion
+          );
 
-        setOutsideNER(mask);
+          setOutsideNER(mask);
+        } catch (e) {
+          console.warn("Could not compute outside mask:", e);
+        }
       })
-      .catch(error => {
-        console.error("Error loading GeoJSON:", error);
-      });
+      .catch((error) => console.error("Error loading GeoJSON:", error));
   }, []);
 
   useEffect(() => {
     fetch("/dummy-heat.json")
       .then((response) => {
-        if (!response.ok) {
-          throw new Error("Failed to fetch dummy heat data");
-        }
-
+        if (!response.ok) throw new Error("Failed to fetch dummy heat data");
         return response.json();
       })
-      .then((data) => {
-        setRiskDists(data);
-      })
-      .catch((error) => {
-        console.error("Error loading dummy heat data:", error);
-      });
+      .then((data) => setRiskDists(data))
+      .catch((error) => console.error("Error loading dummy heat data:", error));
   }, []);
+
+  // Directly handle interaction on risk geometries without point-in-polygon loops
+  const onEachRiskFeature = (feature, layer) => {
+    layer.on({
+      click: (e) => {
+        const { lat, lng } = e.latlng;
+        const clickedName = feature.properties?.name || feature.properties?.DISTRICT;
+
+        // Find corresponding risk district safely
+        const riskDistrict = riskDists?.features?.find(
+          (f) =>
+            f.properties?.name?.trim().toLowerCase() ===
+            clickedName?.trim().toLowerCase()
+        );
+
+        if (riskDistrict) {
+          setSelectedDistrict(riskDistrict.properties);
+        } else {
+          setSelectedDistrict(feature.properties);
+        }
+
+        setSelectedPoint([lat, lng]);
+      },
+    });
+  };
 
   return (
     <div className="map-container">
@@ -132,13 +112,10 @@ function Heatmap() {
         minZoom={6}
         maxBounds={[
           [21, 88],
-          [30, 98]
+          [30, 98],
         ]}
         maxBoundsViscosity={1.0}
-        style={{
-          height: "100vh",
-          width: "100%"
-        }}
+        style={{ height: "100vh", width: "100%" }}
       >
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
@@ -151,91 +128,64 @@ function Heatmap() {
           opacity={0.6}
         />
 
+        {/* MASK LAYER: Set interactive={false} so it never steals pointer events */}
         {outsideNER && (
           <GeoJSON
             data={outsideNER}
+            interactive={false}
             style={{
               color: "black",
-              weight:1,
-              fillOpacity: 0.8
+              weight: 1,
+              fillOpacity: 0.8,
             }}
           />
         )}
 
-        {nerDists && (
-          <GeoJSON
-            data={nerDists}
-            style={{
-              color: "green",
-              weight: 0,
-              fillOpacity:0
-            }}
-          />
-        )}
-
+        {/* RISK HEATMAP LAYER: Set interactive={true} to handle direct clicks */}
         {riskDists && (
           <GeoJSON
             data={riskDists}
+            interactive={true}
+            onEachFeature={onEachRiskFeature}
             style={(feature) => {
-              const riskLevel = feature.properties.riskLevel;
+              const riskLevel = feature.properties?.riskLevel;
+              let fillColor = "gray";
 
-              let fillColor;
-
-              if (riskLevel === "low") {
-                fillColor = "green";
-              } else if (riskLevel === "medium") {
-                fillColor = "yellow";
-              } else if (riskLevel === "high") {
-                fillColor = "orange";
-              } else if (riskLevel === "severe") {
-                fillColor = "red";
-              } else {
-                fillColor = "gray";
-              }
+              if (riskLevel === "low") fillColor = "green";
+              else if (riskLevel === "medium") fillColor = "yellow";
+              else if (riskLevel === "high") fillColor = "orange";
+              else if (riskLevel === "severe") fillColor = "red";
 
               return {
                 color: "black",
                 weight: 1,
                 fillColor: fillColor,
-                fillOpacity: 0.6
+                fillOpacity: 0.6,
               };
             }}
           />
         )}
-        
 
-        {nerDists && riskDists && (
-          <EventClickHandler
-            nerDists={nerDists}
-            riskDists={riskDists}
-            setSelectedDistrict={setSelectedDistrict}
-            setSelectedPoint={setSelectedPoint}
-          />
-        )}
-
-        {selectedPoint && (
-          <Marker position={selectedPoint} />
-        )}
+        {selectedPoint && <Marker position={selectedPoint} />}
 
         <Geocoder />
       </MapContainer>
 
       {selectedDistrict && (
         <div className="risk-panel">
-
           <div className="district-info">
-            <h2>{selectedDistrict.name}</h2>
+            <h2>{selectedDistrict.name || selectedDistrict.DISTRICT}</h2>
             <p>{selectedDistrict.state}</p>
           </div>
 
           <div className="risk-info">
             <span>Risk Score: </span>
-            <strong>{selectedDistrict.riskScore}</strong>
+            <strong>{selectedDistrict.riskScore ?? "N/A"}/100</strong>
           </div>
 
           <div>
             <span>Risk Level: </span>
-            <strong>{selectedDistrict.riskLevel}</strong>
+            <strong>{selectedDistrict.riskLevel ?? "Unknown"}</strong>
           </div>
 
           <div>
@@ -245,9 +195,12 @@ function Heatmap() {
 
           <div>
             <span>Last Updated: </span>
-            <strong>{new Date(selectedDistrict.lastUpdated).toLocaleString()}</strong>
+            <strong>
+              {selectedDistrict.lastUpdated
+                ? new Date(selectedDistrict.lastUpdated).toLocaleString()
+                : "N/A"}
+            </strong>
           </div>
-
         </div>
       )}
     </div>
