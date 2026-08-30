@@ -19,8 +19,9 @@ function Home() {
         <Heatmap />
       </div>
       
-      <ReportIncidentCTA />
-
+    <div id="report-incident">
+  <ReportIncidentCTA />
+</div>
       <div id="alerts">
         <SubscribeAlert />
       </div>

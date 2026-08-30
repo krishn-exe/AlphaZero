@@ -22,13 +22,12 @@ function Navbar() {
     setMenuOpen(false);
   };
 
-  const navItems = [
-    { id: 'home', label: 'home' },
-    { id: 'heatmap', label: 'heatmap' },
-    { id: 'alerts', label: 'alerts' },
-    { id: 'about', label: 'about' },
-  ];
-
+const navItems = [
+  { id: 'home', label: 'home' },
+  { id: 'report-incident', label: 'report incident' },  
+  { id: 'alerts', label: 'alerts' },
+  { id: 'about', label: 'about' },
+];
   return (
     <>
       <nav className="navbar">
