@@ -42,8 +42,9 @@
 }
 
 .hero-cta {
-  background-color: #0b8568;
-  color: #ffffff;
+  text-align: center;
+  background-color: #22C55E;
+  color: #064e3b;
   border: none;
   padding: 0.75rem 1.5rem;
   border-radius: 1.75rem;
