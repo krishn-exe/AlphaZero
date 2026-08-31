@@ -3,11 +3,11 @@
 Landslide Risk Monitoring -- Data Pipeline
 ==========================================
 
-Pulls live geospatial data from Google Earth Engine and USGS API,
-producing a single CSV ready for ML model inference with lat/lon
-columns for heatmap rendering.
+Pulls live geospatial data from Google Earth Engine, USGS API, OpenStreetMap,
+and NASA Landslide catalogs, producing a single CSV ready for ML model inference
+with lat/lon columns for heatmap rendering.
 
-Supports N rectangle geometries defined in config.yaml.  All regions
+Supports N rectangle geometries defined in config.yaml. All regions
 are sampled in a single combined GEE call for efficiency.
 
 Usage
@@ -33,6 +33,11 @@ import pandas as pd
 import yaml
 
 from earthquake_fetcher import compute_earthquake_activity
+from external_features import (
+    compute_soil_erosion_rate,
+    fetch_historical_landslides,
+    fetch_road_distances,
+)
 from gee_fetcher import (
     fetch_periodic_features,
     fetch_realtime_features,
@@ -53,27 +58,35 @@ from state_manager import StateManager
 IST = ZoneInfo("Asia/Kolkata")
 
 # Output column order -- matches the ML model's expected schema.
-# Latitude, Longitude, Region, Fetch_Timestamp are metadata (not fed to model).
+# Latitude, Longitude, Fetch_Timestamp are metadata (not fed to model).
 OUTPUT_COLUMNS = [
     "Latitude",
     "Longitude",
     "Fetch_Timestamp",
     "Rainfall_mm",
+    "Rainfall_3Day",
     "Slope_Angle",
     "Soil_Saturation",
     "Vegetation_Cover",
-    "Rainfall_3Day",
+    "NDVI_Index",
     "Aspect",
     "Elevation_m",
-    "NDVI_Index",
     "Land_Use_Urban",
     "Land_Use_Forest",
     "Land_Use_Agriculture",
     "Earthquake_Activity",
+    "Proximity_to_Water",
+    "Distance_to_Road_m",
+    "Temperature_C",
+    "Humidity_percent",
+    "Soil_pH",
     "Clay_Content",
     "Sand_Content",
     "Silt_Content",
+    "Soil_Erosion_Rate",
+    "Historical_Landslide_Count",
     "Soil_Moisture_Content",
+    "Soil_Temperature_C",
 ]
 
 logger = logging.getLogger("pipeline")
@@ -92,13 +105,30 @@ def setup_logging():
     )
 
 
-def load_config(config_path: str) -> dict:
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+
+def load_config(config_path: str = "config.yaml") -> dict:
     path = Path(config_path)
+    # If path doesn't exist relative to CWD, check relative to the script's directory
+    if not path.is_absolute() and not path.exists():
+        candidate = SCRIPT_DIR / config_path
+        if candidate.exists():
+            path = candidate
+
     if not path.exists():
         logger.error(f"Config file not found: {path.resolve()}")
         sys.exit(1)
+
     with open(path, "r") as f:
-        return yaml.safe_load(f)
+        config = yaml.safe_load(f)
+
+    # Ensure output directory resolves relative to SCRIPT_DIR if specified as relative
+    out_dir_path = Path(config["output"]["directory"])
+    if not out_dir_path.is_absolute():
+        config["output"]["directory"] = str((SCRIPT_DIR / out_dir_path).resolve())
+
+    return config
 
 
 def initialize_gee(gee_config: dict):
@@ -179,10 +209,18 @@ def run_pipeline(config: dict, *, fresh: bool = False) -> pd.DataFrame:
     # -- Initialise GEE ----------------------------------------------------
     initialize_gee(config["gee"])
 
-    # -- Tier 1: Static ----------------------------------------------------
+    # -- Tier 1: Static (GEE DEM, soil texture, pH, water + OSM roads & landslides)
     static_cache = out_dir / "static_cache.csv"
     if fresh or state.needs_static_fetch(regions):
         static_df = fetch_static_features(grid_df)
+
+        # External static features (OSM Road distances & Historical Landslides)
+        road_dist = fetch_road_distances(grid_df, regions)
+        landslides = fetch_historical_landslides(grid_df, regions)
+
+        static_df["Distance_to_Road_m"] = road_dist.values
+        static_df["Historical_Landslide_Count"] = landslides.values
+
         static_df.to_csv(static_cache, index=False)
         state.update_timestamp("static")
         logger.info("Tier 1 (Static): fetched and cached")
@@ -190,7 +228,7 @@ def run_pipeline(config: dict, *, fresh: bool = False) -> pd.DataFrame:
         static_df = pd.read_csv(static_cache)
         logger.info("Tier 1 (Static): loaded from cache")
 
-    # -- Tier 2: Periodic --------------------------------------------------
+    # -- Tier 2: Periodic (MODIS NDVI & FVC Vegetation Cover) --------------
     periodic_cache = out_dir / "periodic_cache.csv"
     refresh_days = schedule_cfg["periodic_refresh_days"]
     if fresh or state.needs_periodic_fetch(regions, refresh_days):
@@ -202,13 +240,12 @@ def run_pipeline(config: dict, *, fresh: bool = False) -> pd.DataFrame:
         periodic_df = pd.read_csv(periodic_cache)
         logger.info(f"Tier 2 (Periodic): loaded from cache (<{refresh_days}d old)")
 
-    # -- Tier 3: Realtime --------------------------------------------------
+    # -- Tier 3: Realtime (Precipitation, Soil Moisture/Temp, Weather) -----
     realtime_df = fetch_realtime_features(grid_df)
     state.update_timestamp("realtime")
     logger.info("Tier 3 (Realtime): fetched")
 
     # -- Tier 4: Earthquake ------------------------------------------------
-    # Use the bounding box that encloses ALL regions for the USGS query.
     combined_bbox = compute_combined_bbox(regions)
     eq_activity = compute_earthquake_activity(
         grid_df,
@@ -229,8 +266,7 @@ def run_pipeline(config: dict, *, fresh: bool = False) -> pd.DataFrame:
     output.index = range(len(output))  # ensure 0-based contiguous index
     output["Fetch_Timestamp"] = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST")
 
-    # Merge each tier on grid_idx.  Drop the duplicate Latitude/Longitude
-    # columns that come back from sampleRegions.
+    # Merge each tier on grid_idx
     for tier_df, tier_label in [
         (static_df, "static"),
         (periodic_df, "periodic"),
@@ -240,7 +276,6 @@ def run_pipeline(config: dict, *, fresh: bool = False) -> pd.DataFrame:
             logger.warning(f"  {tier_label} tier returned empty -- skipping merge")
             continue
 
-        # Keep only feature columns + grid_idx for the join
         drop_cols = {"Latitude", "Longitude"} & set(tier_df.columns)
         join_df = tier_df.drop(columns=list(drop_cols), errors="ignore")
 
@@ -250,12 +285,14 @@ def run_pipeline(config: dict, *, fresh: bool = False) -> pd.DataFrame:
                 output = output.drop(columns=["grid_idx"])
             output = output.reset_index(drop=True)
         else:
-            # Fallback: positional join (same row count & order)
             for col in join_df.columns:
                 output[col] = join_df[col].values
 
-    # Add earthquake activity (already aligned by index)
+    # Add earthquake activity
     output["Earthquake_Activity"] = eq_activity.values
+
+    # Compute Soil Erosion Rate (RUSLE model)
+    output["Soil_Erosion_Rate"] = compute_soil_erosion_rate(output).values
 
     # -- Reorder to match ML schema (guarantee all columns present) --------
     for col in OUTPUT_COLUMNS:
@@ -290,8 +327,6 @@ def run_pipeline(config: dict, *, fresh: bool = False) -> pd.DataFrame:
 def get_next_ist_window(interval_hours: int = 4) -> datetime:
     """
     Return the next IST-aligned window.
-
-    With interval_hours=4, windows are: 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 IST.
     """
     now = datetime.now(IST)
     current_hour = now.hour
@@ -307,8 +342,6 @@ def get_next_ist_window(interval_hours: int = 4) -> datetime:
 def daemon_loop(config: dict):
     """
     Run the pipeline in daemon mode.
-
-    Executes immediately, then sleeps until the next IST 4-hour window.
     """
     interval = config["schedule"]["interval_hours"]
     logger.info(f"Daemon mode started -- IST {interval}h windows")
@@ -342,7 +375,7 @@ def daemon_loop(config: dict):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Landslide Risk Monitoring -- GEE Data Pipeline",
+        description="Landslide Risk Monitoring -- Geospatial Data Pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
@@ -369,12 +402,11 @@ def main():
     setup_logging()
     config = load_config(args.config)
 
-    # -- Dry run: just show what WOULD happen ------------------------------
+    # -- Dry run -----------------------------------------------------------
     if args.dry_run:
         regions = config["regions"]
         grid_df = generate_multi_grid(regions)
 
-        # Compute per-region counts from individual grids
         from grid_generator import generate_grid
         per_region = []
         for region in regions:
@@ -396,6 +428,7 @@ def main():
             print()
         print(f"  GEE project   : {config['gee']['project_id']}")
         print(f"  Output        : {config['output']['directory']}/{config['output']['filename']}")
+        print(f"  Features      : {len(OUTPUT_COLUMNS) - 3} columns (+3 metadata)")
         print(f"  Schedule      : every {config['schedule']['interval_hours']}h IST")
         print("-" * 62)
 
