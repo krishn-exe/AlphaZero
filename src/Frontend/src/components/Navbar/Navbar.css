@@ -60,7 +60,7 @@
 }
 
 .navbar-link:hover {
-  color: #0b8568;
+  color: #064e3b;
 }
 
 .navbar-link-active {
@@ -75,12 +75,13 @@
 }
 
 .navbar-lang-toggle {
-  background-color: #0b8568;
+  background-color: #22C55E;
   border: none;
-  color: #ffffff;
+  color: #064e3b;
   padding: 0.5rem 2.25rem 0.5rem 1.25rem;
   border-radius: 1.75rem;
   font-size: 0.9rem;
+  font-weight:600;
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
@@ -108,8 +109,8 @@
   align-items: center;
 }
 .navbar-admin-login {
-  background-color: #0b8568;
-  color: #ffffff;
+  background-color: #22C55E;
+  color: #064e3b;
   border: none;
   padding: 0.5rem 1.25rem;
   border-radius: 1.75rem;

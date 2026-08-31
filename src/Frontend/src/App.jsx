@@ -4,6 +4,7 @@ import Home from './pages/Home.jsx'
 import ReportIncident from './pages/ReportIncident.jsx'
 import AdminLogin from './pages/AdminLogin.jsx'
 import AdminDashboard from './pages/AdminDashboard.jsx'
+import Footer from './components/Footer/Footer.jsx'
 
 function App(){
   return (
@@ -15,6 +16,7 @@ function App(){
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
       </Routes>
+      <Footer/>
     </>
   )
 }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import './Navbar.css';
 import NavMenuContent from './NavMenuContent';
+import { scrollToSection as scrollToSectionUtil } from '../../utils/scrollToSection';
 
 function Navbar() {
   const [activeSection, setActiveSection] = useState('home');
@@ -11,23 +12,17 @@ function Navbar() {
 
   const scrollToSection = (sectionId) => {
     setActiveSection(sectionId);
-    if (location.pathname !== '/') {
-      navigate('/');
-      setTimeout(() => {
-        document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
-    } else {
-      document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth' });
-    }
+    scrollToSectionUtil(sectionId, navigate, location);
     setMenuOpen(false);
   };
 
-const navItems = [
-  { id: 'home', label: 'home' },
-  { id: 'report-incident', label: 'report incident' },  
-  { id: 'alerts', label: 'alerts' },
-  { id: 'about', label: 'about' },
-];
+  const navItems = [
+    { id: 'home', label: 'home' },
+    { id: 'report-incident', label: 'report incident' },
+    { id: 'alerts', label: 'alerts' },
+    { id: 'about', label: 'about' },
+  ];
+
   return (
     <>
       <nav className="navbar">
@@ -54,7 +49,6 @@ const navItems = [
         </div>
       </nav>
 
-      {/* Mobile menu rendered OUTSIDE <nav>, directly under it in the DOM */}
       {menuOpen && (
         <div className="mobile-menu">
           <NavMenuContent
