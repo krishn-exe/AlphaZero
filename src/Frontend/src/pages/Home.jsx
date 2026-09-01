@@ -3,6 +3,7 @@ import Heatmap from '../components/heatmap/heatmap.jsx'
 import SubscribeAlert from '../components/SubscribeAlert/SubscribeAlert.jsx'
 import InfoMax from '../components/infoMax/infoMax.jsx'
 import ReportIncidentCTA from '../components/ReportIncidentCTA.jsx'
+import HowItWorks from '../components/howItWorks/HowItWorks.jsx'
 
 function Home() {
   return (
@@ -19,11 +20,15 @@ function Home() {
         <Heatmap />
       </div>
       
-    <div id="report-incident">
-  <ReportIncidentCTA />
-</div>
+      <div id="report-incident">
+        <ReportIncidentCTA />
+      </div>
       <div id="alerts">
         <SubscribeAlert />
+      </div>
+
+      <div>
+        <HowItWorks />
       </div>
     </>
   )

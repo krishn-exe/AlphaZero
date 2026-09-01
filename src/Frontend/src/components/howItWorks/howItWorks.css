@@ -1,0 +1,39 @@
+.papa-container{
+    display:flex;
+    flex-direction: column;
+    border:1px solid black;
+    border-radius:20px;
+    padding:20px;
+    justify-content: center;
+    margin:0px 50px 10px;
+    flex-wrap:wrap
+}
+
+.top{
+    display:flex;
+    margin-bottom:10px;
+    align-items: center;
+    gap:20px;
+}
+
+.bottom{
+    display:flex;
+    margin-top:10px;
+    align-items:center;
+}
+
+.block{
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    max-height: 400px;
+}
+.imgHow{
+  height: 90px;
+  object-fit: contain;
+}
+
+.arrow{
+    object-fit: contain;
+    height: 80px;
+}

@@ -1,4 +1,5 @@
 .report-cta-container {
+  margin:0px 50px;
   /* No wrapper styling needed, letting the card manage its own sizing */
 }
 
