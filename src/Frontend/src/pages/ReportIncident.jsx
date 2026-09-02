@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import './ReportIncident.css';
 
 // MOCK API ABSTRACTION
@@ -30,6 +31,8 @@ const mockApi = {
 };
 
 function ReportIncident() {
+  const { t } = useTranslation();
+
   const [formData, setFormData] = useState({
     description: '',
     category: 'road_blockage',
@@ -38,7 +41,7 @@ function ReportIncident() {
   });
 
   const [status, setStatus] = useState('idle');
-  const [errorMessage, setErrorMessage] = useState('');
+  const [errorKey, setErrorKey] = useState('');
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -60,22 +63,22 @@ function ReportIncident() {
         },
         (error) => {
           console.error("Error getting location:", error);
-          alert("Could not retrieve your location automatically. Please enter it manually.");
+          alert(t('reportPage.geoError'));
         }
       );
     } else {
-      alert("Geolocation is not supported by this browser.");
+      alert(t('reportPage.geoNotSupported'));
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setStatus('submitting');
-    setErrorMessage('');
+    setErrorKey('');
 
     if (!formData.description || !formData.category || !formData.latitude || !formData.longitude) {
       setStatus('error');
-      setErrorMessage('Please fill in all required fields.');
+      setErrorKey('reportPage.errorRequired');
       return;
     }
 
@@ -98,22 +101,22 @@ function ReportIncident() {
     } catch (error) {
       console.error(error);
       setStatus('error');
-      setErrorMessage('An error occurred while submitting the report. Please try again.');
+      setErrorKey('reportPage.errorGeneric');
     }
   };
 
   return (
     <div className="report-container">
       <div className="report-header">
-        <h1>Report an Incident</h1>
-        <p>Help us monitor landslide risks and road blockages by reporting incidents in your area.</p>
+        <h1>{t('reportPage.title')}</h1>
+        <p>{t('reportPage.subtitle')}</p>
       </div>
 
       <div className="report-card">
         <form onSubmit={handleSubmit}>
           
           <div className="form-group">
-            <label htmlFor="category">Incident Category *</label>
+            <label htmlFor="category">{t('reportPage.categoryLabel')}</label>
             <select
               id="category"
               name="category"
@@ -122,21 +125,21 @@ function ReportIncident() {
               onChange={handleChange}
               required
             >
-              <option value="road_blockage">Road Blockage</option>
-              <option value="landslide">Landslide</option>
-              <option value="flooding">Flooding</option>
-              <option value="structural_damage">Structural Damage</option>
-              <option value="other">Other</option>
+              <option value="road_blockage">{t('reportPage.categories.road_blockage')}</option>
+              <option value="landslide">{t('reportPage.categories.landslide')}</option>
+              <option value="flooding">{t('reportPage.categories.flooding')}</option>
+              <option value="structural_damage">{t('reportPage.categories.structural_damage')}</option>
+              <option value="other">{t('reportPage.categories.other')}</option>
             </select>
           </div>
 
           <div className="form-group">
-            <label htmlFor="description">Description *</label>
+            <label htmlFor="description">{t('reportPage.descriptionLabel')}</label>
             <textarea
               id="description"
               name="description"
               className="form-control"
-              placeholder="E.g., Tree fell across the highway near mile marker 4..."
+              placeholder={t('reportPage.descriptionPlaceholder')}
               value={formData.description}
               onChange={handleChange}
               required
@@ -145,7 +148,7 @@ function ReportIncident() {
 
           <div className="location-row">
             <div className="form-group">
-              <label htmlFor="latitude">Latitude *</label>
+              <label htmlFor="latitude">{t('reportPage.latitudeLabel')}</label>
               <input
                 type="number"
                 step="any"
@@ -159,7 +162,7 @@ function ReportIncident() {
               />
             </div>
             <div className="form-group">
-              <label htmlFor="longitude">Longitude *</label>
+              <label htmlFor="longitude">{t('reportPage.longitudeLabel')}</label>
               <input
                 type="number"
                 step="any"
@@ -191,7 +194,7 @@ function ReportIncident() {
               }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: '1.2rem' }}>my_location</span>
-              Use my current location
+              {t('reportPage.useCurrentLocation')}
             </button>
           </div>
 
@@ -203,24 +206,24 @@ function ReportIncident() {
             {status === 'submitting' ? (
               <>
                 <div className="spinner"></div>
-                Submitting...
+                {t('reportPage.submitting')}
               </>
             ) : (
-              'Submit Report'
+              t('reportPage.submitBtn')
             )}
           </button>
 
           {status === 'success' && (
             <div className="form-message success">
               <span className="material-symbols-outlined">check_circle</span>
-              Your incident report has been submitted successfully. Authorities have been notified.
+              {t('reportPage.successMsg')}
             </div>
           )}
 
           {status === 'error' && (
             <div className="form-message error">
               <span className="material-symbols-outlined">error</span>
-              {errorMessage}
+              {t(errorKey)}
             </div>
           )}
 

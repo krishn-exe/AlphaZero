@@ -17,10 +17,10 @@ function Navbar() {
   };
 
   const navItems = [
-    { id: 'home', label: 'home' },
-    { id: 'report-incident', label: 'report incident' },
-    { id: 'alerts', label: 'alerts' },
-    { id: 'about', label: 'about' },
+    { id: 'home', labelKey: 'nav.home' },
+    { id: 'report-incident', labelKey: 'nav.reportIncident' },
+    { id: 'alerts', labelKey: 'nav.alerts' },
+    { id: 'about', labelKey: 'nav.about' },
   ];
 
   return (

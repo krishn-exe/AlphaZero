@@ -1,0 +1,89 @@
+{
+  "nav": {
+    "home": "Home",
+    "reportIncident": "Report Incident",
+    "alerts": "Alerts",
+    "about": "About",
+    "adminLogin": "Admin login"
+  },
+  "footer": {
+    "tagline": "AI-Based Early Warning & Landslide Risk Monitoring System for Northeast India",
+    "quickLinks": "Quick Links",
+    "emergencyContacts": "Emergency Contacts",
+    "emergencyNote": "In case of emergency, contact local authorities immediately. This platform is a monitoring aid, not a replacement for official emergency services.",
+    "credits": "Credits",
+    "disclaimer": "Landslide risk predictions are indicative, based on available data, and should not be the sole basis for evacuation decisions.",
+    "authorityDashboard": "Authority Dashboard"
+  },
+  "subscribe": {
+    "title": "Get Landslide Alerts",
+    "subtext": "Stay informed about landslide risk in your district.",
+    "emailPlaceholder": "Email address *",
+    "subscribeBtn": "Subscribe",
+    "subscribing": "Subscribing...",
+    "addOptional": "+ Add phone number or district (optional)",
+    "phonePlaceholder": "Phone number (optional)",
+    "districtPlaceholder": "Select district (optional)",
+    "successMsg": "Subscribed! Check your email for confirmation.",
+    "errorRequired": "Email is required.",
+    "errorRateLimit": "Too many attempts. Please try again in a bit.",
+    "errorGeneric": "Something went wrong. Please try again.",
+    "errorNetwork": "Network error. Please check your connection."
+  },
+  "hero": {
+    "cta": "Explore Live heatmap",
+    "slide1": "AI-Based Early Warning and Landslide Risk Monitoring System in NER",
+    "slide2": "Built for every community — in your language",
+    "slide3": "24/7 continuous monitoring, powered by AI",
+    "slide4": "See something risky? Report it instantly.",
+    "slide5": "Real-time risk monitoring across the North Eastern Region",
+    "slide6": "Real-time control for authorities and responders"
+  },
+  "howItWorks": {
+    "title": "How It Works",
+    "step1Title": "We monitor your region 24/7",
+    "step1Text": "Rainfall, slope data, and satellite/sensor inputs are tracked continuously across NER districts.",
+    "step2Title": "AI predicts risk in realtime",
+    "step2Text": "Our model scores landslide risk (low/moderate/high) and updates the heatmap live",
+    "step3Title": "You get alerted before it happens",
+    "step3Text": "If your area crosses into high risk, you get an instant SMS/email warning — not after the fact.",
+    "step4Title": "You can report what you see",
+    "step4Text": "Spot a landslide, blocked road, or hazard? Report it in seconds to help authorities respond faster."
+  },
+  "infoMax": {
+    "monitoredLocations": "Monitored Location",
+    "highRiskLocations": "High Risk Locations",
+    "continuousMonitoring": "Continuous Monitoring",
+    "predictionAccuracy": "Prediction Accuracy"
+  },
+  "reportCta": {
+    "badge": "CITIZEN REPORTING",
+    "title": "Help Protect Your Community",
+    "description": "Spotted a hazard? Your reports help our AI and authorities respond faster to landslides, road damage, and flooding.",
+    "button": "REPORT AN INCIDENT"
+  },
+  "reportPage": {
+    "title": "Report an Incident",
+    "subtitle": "Help us monitor landslide risks and road blockages by reporting incidents in your area.",
+    "categoryLabel": "Incident Category *",
+    "categories": {
+      "road_blockage": "Road Blockage",
+      "landslide": "Landslide",
+      "flooding": "Flooding",
+      "structural_damage": "Structural Damage",
+      "other": "Other"
+    },
+    "descriptionLabel": "Description *",
+    "descriptionPlaceholder": "E.g., Tree fell across the highway near mile marker 4...",
+    "latitudeLabel": "Latitude *",
+    "longitudeLabel": "Longitude *",
+    "useCurrentLocation": "Use my current location",
+    "geoError": "Could not retrieve your location automatically. Please enter it manually.",
+    "geoNotSupported": "Geolocation is not supported by this browser.",
+    "submitBtn": "Submit Report",
+    "submitting": "Submitting...",
+    "successMsg": "Your incident report has been submitted successfully. Authorities have been notified.",
+    "errorRequired": "Please fill in all required fields.",
+    "errorGeneric": "An error occurred while submitting the report. Please try again."
+  }
+}

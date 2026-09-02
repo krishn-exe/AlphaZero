@@ -1,11 +1,13 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { scrollToSection } from '../../utils/scrollToSection';
 import './Footer.css';
 
 const Footer = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
 
   const handleNav = (sectionId) => (e) => {
     e.preventDefault();
@@ -16,42 +18,37 @@ const Footer = () => {
   return (
     <footer className="footer">
       <div className="footer-container">
-        
+
         {/* Brand */}
         <div className="footer-brand">
           <h2 className="footer-logo">AlphaZero</h2>
-          <p className="footer-tagline">
-            AI-Based Early Warning & Landslide Risk Monitoring System for Northeast India
-          </p>
+          <p className="footer-tagline">{t('footer.tagline')}</p>
         </div>
 
         {/* Quick Links */}
         <div className="footer-section">
-          <h4>Quick Links</h4>
+          <h4>{t('footer.quickLinks')}</h4>
           <ul>
-            <li><a href="#home" onClick={handleNav('home')}>Home</a></li>
-            <li><a href="#report-incident" onClick={handleNav('report-incident')}>Report Incident</a></li>
-            <li><a href="#alerts" onClick={handleNav('alerts')}>Subscribe to Alerts</a></li>
-            <li><a href="#" onClick={(e) => e.preventDefault()}>Authority Dashboard</a></li>
+            <li><a href="#home" onClick={handleNav('home')}>{t('nav.home')}</a></li>
+            <li><a href="#report-incident" onClick={handleNav('report-incident')}>{t('nav.reportIncident')}</a></li>
+            <li><a href="#alerts" onClick={handleNav('alerts')}>{t('nav.alerts')}</a></li>
+            <li><a href="#" onClick={(e) => e.preventDefault()}>{t('footer.authorityDashboard')}</a></li>
           </ul>
         </div>
 
         {/* Emergency Contacts */}
         <div className="footer-section">
-          <h4>Emergency Contacts</h4>
+          <h4>{t('footer.emergencyContacts')}</h4>
           <ul>
             <li>NDMA Helpline: 1078</li>
             <li>State Disaster Helpline: 108</li>
           </ul>
-          <p className="footer-emergency-note">
-            In case of emergency, contact local authorities immediately. 
-            This platform is a monitoring aid, not a replacement for official emergency services.
-          </p>
+          <p className="footer-emergency-note">{t('footer.emergencyNote')}</p>
         </div>
 
         {/* Attribution */}
         <div className="footer-section">
-          <h4>Credits</h4>
+          <h4>{t('footer.credits')}</h4>
           <ul className="footer-attribution">
             <li>Icons by <a href="https://www.flaticon.com" target="_blank" rel="noreferrer">Flaticon</a></li>
             {/* Add per-icon attribution lines here as required by license */}
@@ -62,10 +59,7 @@ const Footer = () => {
 
       {/* Disclaimer */}
       <div className="footer-disclaimer">
-        <p>
-          Landslide risk predictions are indicative, based on available data, 
-          and should not be the sole basis for evacuation decisions.
-        </p>
+        <p>{t('footer.disclaimer')}</p>
       </div>
 
       {/* Bottom bar */}
