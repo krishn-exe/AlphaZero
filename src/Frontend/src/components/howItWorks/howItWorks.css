@@ -20,13 +20,15 @@
     display:flex;
     margin-top:10px;
     align-items:center;
+    justify-content: space-evenly;
+    flex-wrap: wrap;
 }
 
 .block{
     display: flex;
     align-items: center;
     flex-direction: column;
-    max-height: 400px;
+    max-width: 400px;
 }
 .imgHow{
   height: 90px;
@@ -36,4 +38,13 @@
 .arrow{
     object-fit: contain;
     height: 80px;
+}
+
+.blocktext{
+    max-width: 100px;
+    flex-shrink: 2;
+}
+.inlinetext{
+    max-width: 200px;
+    flex-shrink: 2;
 }
