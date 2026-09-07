@@ -21,7 +21,7 @@ const Footer = () => {
 
         {/* Brand */}
         <div className="footer-brand">
-          <h2 className="footer-logo">AlphaZero</h2>
+          <h2 className="footer-logo">Landslide Gaurd</h2>
           <p className="footer-tagline">{t('footer.tagline')}</p>
         </div>
 
@@ -64,7 +64,7 @@ const Footer = () => {
 
       {/* Bottom bar */}
       <div className="footer-bottom">
-        <p>&copy; 2026 Team AlphaZero — Built for Smart India Hackathon (PS 26001)</p>
+        <p>&copy; 2026 Team Zenith — Built for Smart India Hackathon (PS 26001)</p>
       </div>
     </footer>
   );
