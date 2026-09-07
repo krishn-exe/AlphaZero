@@ -89,3 +89,16 @@ model Subscriber {
 
   @@map("subscribers")
 }
+
+// AI/ML Grid Predictions
+model GridPrediction {
+  id          Int      @id @default(autoincrement())
+  latitude    Float
+  longitude   Float
+  riskRating  Float    @map("risk_rating") // 0 to 1
+  computedAt  DateTime @map("computed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([latitude, longitude])
+  @@map("grid_predictions")
+}

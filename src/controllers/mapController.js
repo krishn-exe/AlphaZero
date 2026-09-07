@@ -1,5 +1,6 @@
 const prisma = require('../config/db');
 const emailService = require('../services/emailService');
+const { parse } = require('csv-parse/sync');
 
 /**
  * Maps a numeric risk score to a severity band.
@@ -334,6 +335,55 @@ async function triggerManualAlert(req, res) {
   }
 }
 
+/**
+ * POST /api/map/national
+ * Receives the AIML pipeline's 4-hourly predictions CSV
+ */
+async function receiveNationalPredictions(req, res) {
+  try {
+    const time = req.body.time; // e.g. "2026-09-07 16:00:00 IST"
+    
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ error: 'Missing CSV file in "data" field' });
+    }
+
+    const csvString = req.file.buffer.toString('utf-8');
+    const records = parse(csvString, {
+      columns: true,
+      skip_empty_lines: true,
+      cast: true,
+    });
+
+    // Replace " IST" with +05:30 to let Date handle it properly
+    const dateStr = time ? time.replace(' IST', '+05:30') : new Date().toISOString();
+    const computedAt = new Date(dateStr);
+
+    // To prevent infinite growth every 4h, we overwrite the latest predictions
+    await prisma.$transaction([
+      prisma.gridPrediction.deleteMany({}),
+      prisma.gridPrediction.createMany({
+        data: records.map(r => ({
+          latitude: r.Latitude,
+          longitude: r.Longitude,
+          riskRating: r.Risk_Rating,
+          computedAt: computedAt
+        }))
+      })
+    ]);
+
+    console.log(`Received ${records.length} predictions at ${time}`);
+
+    res.status(200).json({
+      status: 'ok',
+      received: records.length,
+      timestamp: time,
+    });
+  } catch (err) {
+    console.error('receiveNationalPredictions error:', err);
+    res.status(500).json({ error: 'Failed to process national predictions' });
+  }
+}
+
 module.exports = {
   getNationalHeatmap,
   getTopRiskDistricts,
@@ -344,4 +394,5 @@ module.exports = {
   updateCityRisk,
   getRiskLevel,
   triggerManualAlert,
+  receiveNationalPredictions,
 };

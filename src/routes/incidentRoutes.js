@@ -7,6 +7,8 @@ const {
   getIncidents,
   getIncidentById,
   updateIncidentStatus,
+  getRecentIncidents,
+  getNearbyIncidents,
 } = require('../controllers/incidentController');
 
 // Rate limiting for public incident submission (max 5 requests per 15 minutes per IP)
@@ -18,6 +20,8 @@ const submitLimiter = rateLimit({
 
 // Public read endpoints
 router.get('/', getIncidents);
+router.get('/recent', getRecentIncidents);
+router.get('/nearby', getNearbyIncidents);
 router.get('/:id', getIncidentById);
 
 // Public write endpoints (rate-limited to prevent spam)

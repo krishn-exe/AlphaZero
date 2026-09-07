@@ -5,7 +5,7 @@ This guide explains how the frontend should integrate with the newly built "Earl
 ## 1. Subscribing to Alerts
 When a user wants to receive email notifications for high/severe landslide risks, they will use the "Subscribe" box on the landing page.
 
-**Endpoint:** `POST /api/subscribe`
+**Endpoint:** `POST `
 **Auth:** None required.
 **Note:** This endpoint has rate-limiting enabled (max 10 requests per 1 hour per IP) to prevent spam.
 

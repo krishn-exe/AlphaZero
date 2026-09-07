@@ -109,9 +109,64 @@ const updateIncidentStatus = async (req, res) => {
   }
 };
 
+function distanceKm(lat1, lng1, lat2, lng2) {
+  const toRad = deg => (deg * Math.PI) / 180;
+  const R = 6371; // Earth's radius in km
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// GET /api/incidents/recent
+const getRecentIncidents = async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 10, 100);
+    const incidents = await prisma.incident.findMany({
+      orderBy: { reportedAt: 'desc' },
+      take: limit,
+    });
+    res.json(incidents);
+  } catch (err) {
+    console.error('getRecentIncidents error:', err);
+    res.status(500).json({ error: 'Failed to load recent incidents' });
+  }
+};
+
+// GET /api/incidents/nearby
+const getNearbyIncidents = async (req, res) => {
+  try {
+    const { lat, lng, radiusKm } = req.query;
+    if (!lat || !lng) {
+      return res.status(400).json({ error: 'lat and lng query params are required' });
+    }
+    const radius = Number(radiusKm) || 10;
+    const userLat = Number(lat);
+    const userLng = Number(lng);
+
+    const allIncidents = await prisma.incident.findMany();
+    const nearby = allIncidents
+      .map(inc => ({
+        ...inc,
+        distanceKm: distanceKm(userLat, userLng, inc.latitude, inc.longitude),
+      }))
+      .filter(inc => inc.distanceKm <= radius)
+      .sort((a, b) => a.distanceKm - b.distanceKm);
+
+    res.json(nearby);
+  } catch (err) {
+    console.error('getNearbyIncidents error:', err);
+    res.status(500).json({ error: 'Failed to load nearby incidents' });
+  }
+};
+
 module.exports = {
   createIncident,
   getIncidents,
   getIncidentById,
   updateIncidentStatus,
+  getRecentIncidents,
+  getNearbyIncidents,
 };
