@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "cities" ADD COLUMN     "rainfall" DOUBLE PRECISION NOT NULL DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE "districts" ADD COLUMN     "rainfall" DOUBLE PRECISION NOT NULL DEFAULT 0;
