@@ -19,6 +19,9 @@ app.use(express.json());
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
+const { getGridPredictions } = require('./controllers/mapController');
+
+app.get('/api/risk-data', getGridPredictions);
 app.use('/api/map', mapRoutes);
 app.use('/api/incidents', incidentRoutes);
 app.use('/api/subscribe', subscribeRoutes);

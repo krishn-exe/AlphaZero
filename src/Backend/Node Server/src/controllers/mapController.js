@@ -36,7 +36,6 @@ async function getNationalHeatmap(req, res) {
         riskScore: d.riskScore,
         riskLevel: d.riskLevel,
         rainfall: d.rainfall,
-        confidence: d.confidence,
         computedAt: d.computedAt,
         lastUpdated: d.lastUpdated,
       },
@@ -80,18 +79,15 @@ async function getDistrictDetail(req, res) {
 /**
  * PUT /api/map/district/:id/risk
  * Lets AIML push an updated risk score. Protected by checkApiKey middleware.
- * Body: { riskScore: number (0-100, required), confidence?: number (0-1), computedAt?: ISO string }
+ * Body: { riskScore: number (0-100, required), computedAt?: ISO string }
  */
 async function updateDistrictRisk(req, res) {
   try {
     const { id } = req.params;
-    const { riskScore, confidence, computedAt, rainfall } = req.body;
+    const { riskScore, computedAt, rainfall } = req.body;
 
     if (typeof riskScore !== 'number' || riskScore < 0 || riskScore > 100) {
       return res.status(400).json({ error: 'riskScore must be a number between 0 and 100' });
-    }
-    if (confidence !== undefined && (typeof confidence !== 'number' || confidence < 0 || confidence > 1)) {
-      return res.status(400).json({ error: 'confidence must be a number between 0 and 1' });
     }
 
     // Fetch previous risk level to detect escalation
@@ -111,7 +107,6 @@ async function updateDistrictRisk(req, res) {
         riskScore,
         riskLevel: newRiskLevel,
         rainfall: rainfall !== undefined ? rainfall : undefined,
-        confidence: confidence ?? undefined,
         computedAt: computedAt ? new Date(computedAt) : undefined,
       },
     });
@@ -172,7 +167,6 @@ async function getDistrictCities(req, res) {
         riskScore: c.riskScore,
         riskLevel: c.riskLevel,
         rainfall: c.rainfall,
-        confidence: c.confidence,
         computedAt: c.computedAt,
         lastUpdated: c.lastUpdated,
       },
@@ -196,13 +190,10 @@ async function getDistrictCities(req, res) {
 async function updateCityRisk(req, res) {
   try {
     const { id } = req.params;
-    const { riskScore, confidence, computedAt, rainfall } = req.body;
+    const { riskScore, computedAt, rainfall } = req.body;
 
     if (typeof riskScore !== 'number' || riskScore < 0 || riskScore > 100) {
       return res.status(400).json({ error: 'riskScore must be a number between 0 and 100' });
-    }
-    if (confidence !== undefined && (typeof confidence !== 'number' || confidence < 0 || confidence > 1)) {
-      return res.status(400).json({ error: 'confidence must be a number between 0 and 1' });
     }
 
     const previousCity = await prisma.city.findUnique({
@@ -222,7 +213,6 @@ async function updateCityRisk(req, res) {
         riskScore,
         riskLevel: newRiskLevel,
         rainfall: rainfall !== undefined ? rainfall : undefined,
-        confidence: confidence ?? undefined,
         computedAt: computedAt ? new Date(computedAt) : undefined,
       },
     });
@@ -384,6 +374,34 @@ async function receiveNationalPredictions(req, res) {
   }
 }
 
+/**
+ * GET /api/risk-data
+ * Returns the GridPredictions for the frontend heatmap.
+ */
+async function getGridPredictions(req, res) {
+  try {
+    const predictions = await prisma.gridPrediction.findMany({
+      select: {
+        latitude: true,
+        longitude: true,
+        riskRating: true,
+      }
+    });
+    
+    // Map to frontend expected format: { lat, lng, riskScore }
+    const formatted = predictions.map(p => ({
+      lat: p.latitude,
+      lng: p.longitude,
+      riskScore: p.riskRating
+    }));
+
+    res.json(formatted);
+  } catch (err) {
+    console.error('getGridPredictions error:', err);
+    res.status(500).json({ error: 'Failed to load grid predictions' });
+  }
+}
+
 module.exports = {
   getNationalHeatmap,
   getTopRiskDistricts,
@@ -395,4 +413,5 @@ module.exports = {
   getRiskLevel,
   triggerManualAlert,
   receiveNationalPredictions,
+  getGridPredictions,
 };

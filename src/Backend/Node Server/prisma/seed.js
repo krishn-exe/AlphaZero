@@ -70,7 +70,7 @@ async function main() {
         riskScore: score,
         riskLevel: getRiskLevel(score),
         rainfall: rainfall,
-        // confidence / computedAt intentionally left null — demo data, not model output
+        // computedAt intentionally left null — demo data, not model output
       },
     });
 
@@ -95,7 +95,7 @@ async function main() {
         riskScore: 0,
         riskLevel: getRiskLevel(0),
         rainfall: randomRainfall(),
-        // confidence / computedAt stay null until AIML's first real PUT
+        // computedAt stays null until AIML's first real PUT
       },
     });
 

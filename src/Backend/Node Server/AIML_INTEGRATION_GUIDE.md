@@ -54,7 +54,6 @@ For specific pilot cities, the pipeline pushes direct risk updates.
 ```json
 {
   "riskScore": 82.5,
-  "confidence": 0.94,
   "computedAt": "2026-09-07T16:00:00Z"
 }
 ```
