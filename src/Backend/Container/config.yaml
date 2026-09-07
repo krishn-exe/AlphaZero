@@ -1,16 +1,13 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Landslide Risk Monitoring — Data Pipeline Configuration
+# Landslide Risk Monitoring -- Configuration
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Which region to pull data for (must match a key under 'regions')
-active_region: shillong
-
 # ── Region Definitions ────────────────────────────────────────────────────────
-# Each region defines a bounding box and grid resolution.
-# Switch active_region above to change the target area.
+# List of rectangle geometries. The pipeline pulls data for ALL regions and
+# merges them into a single output CSV. Add/remove rectangles freely.
+# In future, the frontend will generate this list from a map UI.
 regions:
-  shillong:
-    name: "Shillong, Meghalaya"
+  - name: "Shillong, Meghalaya"
     bbox:
       min_lat: 25.20
       max_lat: 25.75
@@ -18,8 +15,7 @@ regions:
       max_lon: 92.05
     grid_resolution_km: 1.0
 
-  aizawl:
-    name: "Aizawl, Mizoram"
+  - name: "Aizawl, Mizoram"
     bbox:
       min_lat: 23.55
       max_lat: 23.95
@@ -27,9 +23,18 @@ regions:
       max_lon: 92.85
     grid_resolution_km: 1.0
 
+  # ── Add more rectangles below ──
+  # - name: "Kohima, Nagaland"
+  #   bbox:
+  #     min_lat: 25.60
+  #     max_lat: 25.72
+  #     min_lon: 94.05
+  #     max_lon: 94.15
+  #   grid_resolution_km: 1.0
+
 # ── Google Earth Engine ───────────────────────────────────────────────────────
 gee:
-  project_id: "YOUR_GEE_PROJECT_ID"
+  project_id: "alphazero-506716"
   # For service account auth (unattended runs), uncomment and set:
   # credentials_path: "path/to/service-account-key.json"
 
@@ -49,3 +54,10 @@ earthquake:
 output:
   directory: "data"
   filename: "output.csv"
+
+# ── Server Push ───────────────────────────────────────────────────────────────
+# Endpoint that receives POST requests with prediction results.
+server:
+  url: "https://land-slide-sih26.onrender.com/api/map/national"
+  # Optional API key for Authorization header (leave empty if not required)
+  api_key: ""
