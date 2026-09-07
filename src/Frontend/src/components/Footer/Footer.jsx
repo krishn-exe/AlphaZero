@@ -21,7 +21,7 @@ const Footer = () => {
 
         {/* Brand */}
         <div className="footer-brand">
-          <h2 className="footer-logo">Landslide Gaurd</h2>
+          <h2 className="footer-logo">BhuRakshak</h2>
           <p className="footer-tagline">{t('footer.tagline')}</p>
         </div>
 
