@@ -1,212 +1,976 @@
-import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, useMap, GeoJSON, Marker, ZoomControl } from "react-leaflet";
+import { useEffect, useState, useCallback } from "react";
+
+import {
+  MapContainer,
+  TileLayer,
+  GeoJSON,
+  CircleMarker,
+  useMap,
+} from "react-leaflet";
+
 import L from "leaflet";
+
+import {
+  featureCollection,
+  polygon,
+  union,
+  difference,
+} from "@turf/turf";
+
 import "leaflet/dist/leaflet.css";
 import "leaflet-control-geocoder";
 import "leaflet-control-geocoder/dist/Control.Geocoder.css";
 
-import { featureCollection, polygon, union, difference } from "@turf/turf";
 import "./heatmap.css";
 
-function Geocoder({position="topright"}) {
+
+// ============================================
+// CONFIGURATION
+// ============================================
+
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:3000";
+
+
+// Change this later if you want polling.
+// Example: 10000 = refresh every 10 seconds.
+// Keep as null for fetch-once mode.
+
+const REFRESH_INTERVAL = null;
+
+
+// ============================================
+// GEOCODER
+// ============================================
+
+function Geocoder({ position = "topright" }) {
+
   const map = useMap();
 
+
   useEffect(() => {
+
     const control = L.Control.geocoder({
       defaultMarkGeocode: true,
-      position:position,
+      position,
     }).addTo(map);
+
 
     return () => {
       map.removeControl(control);
     };
+
   }, [map, position]);
 
+
   return null;
+
 }
 
-function Heatmap() {
-  const [nerDists, setnerDists] = useState(null);
-  const [riskDists, setRiskDists] = useState(null);
-  const [outsideNER, setOutsideNER] = useState(null);
 
-  const [selectedDistrict, setSelectedDistrict] = useState(null);
-  const [selectedPoint, setSelectedPoint] = useState(null);
+// ============================================
+// RISK HELPERS
+// ============================================
 
-  useEffect(() => {
-    fetch("/ner_districts.geojson")
-      .then((response) => {
-        if (!response.ok) throw new Error("Failed to fetch GeoJSON");
-        return response.json();
-      })
-      .then((data) => {
-        setnerDists(data);
+function normalizeRiskScore(riskScore) {
 
-        try {
-          const ner = featureCollection(data.features);
-          const nerUnion = union(ner);
+  const score = Number(riskScore);
 
-          const world = polygon([
-            [
-              [-180, -85],
-              [180, -85],
-              [180, 85],
-              [-180, 85],
-              [-180, -85],
-            ],
-          ]);
 
-          // Handle Turf v6 / v7 difference API variations safely
-          const mask = difference(
-            featureCollection ? featureCollection([world, nerUnion]) : world,
-            nerUnion
-          );
+  if (!Number.isFinite(score)) {
+    return null;
+  }
 
-          setOutsideNER(mask);
-        } catch (e) {
-          console.warn("Could not compute outside mask:", e);
-        }
-      })
-      .catch((error) => console.error("Error loading GeoJSON:", error));
-  }, []);
 
-  useEffect(() => {
-    fetch("/dummy-heat.json")
-      .then((response) => {
-        if (!response.ok) throw new Error("Failed to fetch dummy heat data");
-        return response.json();
-      })
-      .then((data) => setRiskDists(data))
-      .catch((error) => console.error("Error loading dummy heat data:", error));
-  }, []);
+  // Backend should send 0 → 1.
+  // Clamp unexpected values safely.
 
-  // Directly handle interaction on risk geometries without point-in-polygon loops
-  const onEachRiskFeature = (feature, layer) => {
-    layer.on({
-      click: (e) => {
-        const { lat, lng } = e.latlng;
-        const clickedName = feature.properties?.name || feature.properties?.DISTRICT;
+  return Math.max(
+    0,
+    Math.min(1, score)
+  );
 
-        // Find corresponding risk district safely
-        const riskDistrict = riskDists?.features?.find(
-          (f) =>
-            f.properties?.name?.trim().toLowerCase() ===
-            clickedName?.trim().toLowerCase()
-        );
+}
 
-        if (riskDistrict) {
-          setSelectedDistrict(riskDistrict.properties);
-        } else {
-          setSelectedDistrict(feature.properties);
-        }
 
-        setSelectedPoint([lat, lng]);
-      },
-    });
-  };
+function getRiskColor(riskScore) {
+
+  const score =
+    normalizeRiskScore(riskScore);
+
+
+  if (score === null) {
+    return "#808080";
+  }
+
+
+  if (score < 0.25) {
+    return "#22c55e";
+  }
+
+
+  if (score < 0.5) {
+    return "#eab308";
+  }
+
+
+  if (score < 0.75) {
+    return "#f97316";
+  }
+
+
+  return "#ef4444";
+
+}
+
+
+function getRiskLevel(riskScore) {
+
+  const score =
+    normalizeRiskScore(riskScore);
+
+
+  if (score === null) {
+    return "Unknown";
+  }
+
+
+  if (score < 0.25) {
+    return "Low";
+  }
+
+
+  if (score < 0.5) {
+    return "Moderate";
+  }
+
+
+  if (score < 0.75) {
+    return "High";
+  }
+
+
+  return "Severe";
+
+}
+
+
+function getRiskPercentage(riskScore) {
+
+  const score =
+    normalizeRiskScore(riskScore);
+
+
+  if (score === null) {
+    return "N/A";
+  }
+
+
+  return Math.round(score * 100);
+
+}
+
+
+// ============================================
+// VALIDATE API POINT
+// ============================================
+
+function isValidRiskPoint(point) {
+
+  const lat = Number(point.lat);
+  const lng = Number(point.lng);
+
 
   return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  );
+
+}
+
+
+// ============================================
+// MAIN COMPONENT
+// ============================================
+
+function Heatmap() {
+
+
+  // ==========================================
+  // MAP MASK
+  // ==========================================
+
+  const [outsideNER, setOutsideNER] =
+    useState(null);
+
+
+  // ==========================================
+  // LIVE RISK POINTS
+  // ==========================================
+
+  const [riskPoints, setRiskPoints] =
+    useState([]);
+
+
+  // ==========================================
+  // SELECTED POINT
+  // ==========================================
+
+  const [
+    selectedRiskPoint,
+    setSelectedRiskPoint,
+  ] = useState(null);
+
+
+  // ==========================================
+  // API STATUS
+  // ==========================================
+
+  const [isLoading, setIsLoading] =
+    useState(true);
+
+
+  const [error, setError] =
+    useState(null);
+
+
+  const [lastFetched, setLastFetched] =
+    useState(null);
+
+
+  // ==========================================
+  // LOAD NER GEOJSON + CREATE MASK
+  //
+  // Turf version: 7.4.0
+  // ==========================================
+
+  useEffect(() => {
+
+    const controller =
+      new AbortController();
+
+
+    async function loadNERMask() {
+
+      try {
+
+        const response = await fetch(
+          "/ner_districts.geojson",
+          {
+            signal: controller.signal,
+          }
+        );
+
+
+        if (!response.ok) {
+
+          throw new Error(
+            "Failed to load NER boundaries"
+          );
+
+        }
+
+
+        const data =
+          await response.json();
+
+
+        if (
+          !data.features ||
+          !Array.isArray(data.features)
+        ) {
+
+          throw new Error(
+            "Invalid NER GeoJSON format"
+          );
+
+        }
+
+
+        // Combine all NER district polygons
+
+        const nerCollection =
+          featureCollection(
+            data.features
+          );
+
+
+        const nerUnion =
+          union(nerCollection);
+
+
+        if (!nerUnion) {
+
+          throw new Error(
+            "Could not create NER boundary"
+          );
+
+        }
+
+
+        // World polygon
+
+        const world = polygon([
+          [
+            [-180, -85],
+            [180, -85],
+            [180, 85],
+            [-180, 85],
+            [-180, -85],
+          ],
+        ]);
+
+
+        // Turf 7:
+        // Difference takes a FeatureCollection
+
+        const mask = difference(
+          featureCollection([
+            world,
+            nerUnion,
+          ])
+        );
+
+
+        setOutsideNER(mask);
+
+      }
+
+      catch (error) {
+
+        if (
+          error.name !== "AbortError"
+        ) {
+
+          console.error(
+            "NER mask error:",
+            error
+          );
+
+        }
+
+      }
+
+    }
+
+
+    loadNERMask();
+
+
+    return () => {
+      controller.abort();
+    };
+
+
+  }, []);
+
+
+  // ==========================================
+  // FETCH LIVE RISK DATA
+  // ==========================================
+
+  const fetchRiskData =
+    useCallback(async (signal) => {
+
+      try {
+
+        setError(null);
+
+
+        const response =
+          await fetch(
+
+            `${API_URL}/api/risk-data`,
+
+            {
+              signal,
+            }
+
+          );
+
+
+        if (!response.ok) {
+
+          throw new Error(
+            `Risk API error: ${response.status}`
+          );
+
+        }
+
+
+        const responseData =
+          await response.json();
+
+
+        /*
+          Supports both formats:
+
+
+          FORMAT 1:
+
+          [
+            {
+              lat,
+              lng,
+              riskScore
+            }
+          ]
+
+
+          FORMAT 2:
+
+          {
+            data: [
+              {
+                lat,
+                lng,
+                riskScore
+              }
+            ]
+          }
+
+        */
+
+
+        const points =
+          Array.isArray(responseData)
+
+            ? responseData
+
+            : responseData.data;
+
+
+        if (!Array.isArray(points)) {
+
+          throw new Error(
+            "Invalid risk data received"
+          );
+
+        }
+
+
+        // Keep only valid coordinates
+
+        const validPoints =
+          points.filter(
+            isValidRiskPoint
+          );
+
+
+        setRiskPoints(
+          validPoints
+        );
+
+
+        setLastFetched(
+          new Date()
+        );
+
+      }
+
+      catch (error) {
+
+        if (
+          error.name !== "AbortError"
+        ) {
+
+          console.error(
+            "Risk data error:",
+            error
+          );
+
+
+          setError(
+            error.message
+          );
+
+        }
+
+      }
+
+      finally {
+
+        if (!signal.aborted) {
+
+          setIsLoading(false);
+
+        }
+
+      }
+
+    }, []);
+
+
+  // ==========================================
+  // INITIAL FETCH
+  // + OPTIONAL POLLING
+  // ==========================================
+
+  useEffect(() => {
+
+    const controller =
+      new AbortController();
+
+
+    setIsLoading(true);
+
+
+    fetchRiskData(
+      controller.signal
+    );
+
+
+    let interval;
+
+
+    if (REFRESH_INTERVAL) {
+
+      interval = setInterval(
+        () => {
+
+          fetchRiskData(
+            controller.signal
+          );
+
+        },
+
+        REFRESH_INTERVAL
+      );
+
+    }
+
+
+    return () => {
+
+      controller.abort();
+
+
+      if (interval) {
+        clearInterval(interval);
+      }
+
+    };
+
+
+  }, [fetchRiskData]);
+
+
+  // ==========================================
+  // HANDLE POINT CLICK
+  // ==========================================
+
+  function handlePointClick(point) {
+
+    setSelectedRiskPoint(point);
+
+  }
+
+
+  // ==========================================
+  // RENDER
+  // ==========================================
+
+  return (
+
     <div className="map-container">
+
+
+      {/* ================================
+          API STATUS
+      ================================= */}
+
+      {isLoading && (
+
+        <div className="map-status">
+          Loading risk data...
+        </div>
+
+      )}
+
+
+      {error && (
+
+        <div className="map-error">
+
+          Unable to load live risk data.
+
+        </div>
+
+      )}
+
+
+      {/* ================================
+          MAP
+      ================================= */}
+
       <MapContainer
-        center={[26.11667, 92.86667]}
+
+        center={[
+          26.11667,
+          92.86667,
+        ]}
+
         zoom={7}
+
         minZoom={6}
+
         maxBounds={[
           [21, 88],
           [30, 98],
         ]}
-        maxBoundsViscosity={1.0}
+
+        maxBoundsViscosity={1}
+
         scrollWheelZoom={false}
-        style={{ height: "70vh", width: "100%" }}
+
+        style={{
+          height: "70vh",
+          width: "100%",
+        }}
+
       >
-        <TileLayer
-          attribution="&copy; OpenStreetMap contributors"
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+
+
+        {/* ============================
+            BASE MAP
+        ============================= */}
 
         <TileLayer
+
+          attribution="
+            &copy; OpenStreetMap contributors
+          "
+
+          url="
+            https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png
+          "
+
+        />
+
+
+        {/* ============================
+            TERRAIN OVERLAY
+        ============================= */}
+
+        <TileLayer
+
           attribution="&copy; Esri"
-          url={`https://ibasemaps-api.arcgis.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}?token=${import.meta.env.VITE_ARCGIS_API_KEY}`}
+
+          url={
+            `https://ibasemaps-api.arcgis.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}?token=${import.meta.env.VITE_ARCGIS_API_KEY}`
+          }
+
           opacity={0.6}
+
         />
 
-        {/* MASK LAYER: Set interactive={false} so it never steals pointer events */}
+
+        {/* ============================
+            MASK OUTSIDE NER
+        ============================= */}
+
         {outsideNER && (
+
           <GeoJSON
+
             data={outsideNER}
+
             interactive={false}
+
             style={{
               color: "black",
-              weight: 1,
+              weight: 0,
+              fillColor: "black",
               fillOpacity: 0.8,
             }}
+
           />
+
         )}
 
-        {/* RISK HEATMAP LAYER: Set interactive={true} to handle direct clicks */}
-        {riskDists && (
-          <GeoJSON
-            data={riskDists}
-            interactive={true}
-            onEachFeature={onEachRiskFeature}
-            style={(feature) => {
-              const riskLevel = feature.properties?.riskLevel;
-              let fillColor = "gray";
 
-              if (riskLevel === "low") fillColor = "green";
-              else if (riskLevel === "medium") fillColor = "yellow";
-              else if (riskLevel === "high") fillColor = "orange";
-              else if (riskLevel === "severe") fillColor = "red";
+        {/* ============================
+            LIVE RISK POINTS
+        ============================= */}
 
-              return {
-                color: "black",
-                weight: 1,
-                fillColor: fillColor,
-                fillOpacity: 0.6,
-              };
-            }}
-          />
+        {riskPoints.map(
+          (point, index) => {
+
+            const score =
+              normalizeRiskScore(
+                point.riskScore
+              );
+
+
+            const isSelected =
+
+              selectedRiskPoint &&
+
+              (
+                point.id
+                  ? point.id === selectedRiskPoint.id
+
+                  : point.lat === selectedRiskPoint.lat &&
+
+                    point.lng === selectedRiskPoint.lng
+              );
+
+
+            return (
+
+              <CircleMarker
+
+                key={
+                  point.id ||
+                  `${point.lat}-${point.lng}-${index}`
+                }
+
+                center={[
+                  Number(point.lat),
+                  Number(point.lng),
+                ]}
+
+                radius={
+                  isSelected
+                    ? 11
+                    : 8
+                }
+
+                pathOptions={{
+
+                  fillColor:
+                    getRiskColor(score),
+
+                  color:
+                    isSelected
+                      ? "white"
+                      : "black",
+
+                  weight:
+                    isSelected
+                      ? 3
+                      : 1,
+
+                  fillOpacity: 0.85,
+
+                }}
+
+                eventHandlers={{
+
+                  click: () =>
+                    handlePointClick(point),
+
+                }}
+
+              />
+
+            );
+
+          }
         )}
 
-        {selectedPoint && <Marker position={selectedPoint} />}
-        
-        <Geocoder position="topright" />
+
+        {/* ============================
+            GEOCODER
+        ============================= */}
+
+        <Geocoder
+          position="topright"
+        />
+
+
       </MapContainer>
 
-      {selectedDistrict && (
+
+      {/* ================================
+          RISK INFORMATION PANEL
+      ================================= */}
+
+      {selectedRiskPoint && (
+
         <div className="risk-panel">
+
+
+          {/* TITLE */}
+
           <div className="district-info">
-            <h2>{selectedDistrict.name || selectedDistrict.DISTRICT}</h2>
-            <p>{selectedDistrict.state}</p>
+
+            <h2>
+              Risk Monitoring Point
+            </h2>
+
+            <p>
+              Live Landslide Risk Assessment
+            </p>
+
           </div>
+
+
+          {/* RISK SCORE */}
 
           <div className="risk-info">
-            <span>Risk Score: </span>
-            <strong>{selectedDistrict.riskScore ?? "N/A"}/100</strong>
-          </div>
 
-          <div>
-            <span>Risk Level: </span>
-            <strong>{selectedDistrict.riskLevel ?? "Unknown"}</strong>
-          </div>
+            <span>
+              Risk Score:
+            </span>
 
-          <div>
-            <span>Rainfall: </span>
-            <strong>142 mm</strong>
-          </div>
-
-          <div>
-            <span>Last Updated: </span>
             <strong>
-              {selectedDistrict.lastUpdated
-                ? new Date(selectedDistrict.lastUpdated).toLocaleString()
-                : "N/A"}
+
+              {
+                getRiskPercentage(
+                  selectedRiskPoint.riskScore
+                )
+              }
+
+              {
+                getRiskPercentage(
+                  selectedRiskPoint.riskScore
+                ) !== "N/A" && "/100"
+              }
+
             </strong>
+
           </div>
+
+
+          {/* RISK LEVEL */}
+
+          <div>
+
+            <span>
+              Risk Level:
+            </span>
+
+            <strong>
+
+              {
+                getRiskLevel(
+                  selectedRiskPoint.riskScore
+                )
+              }
+
+            </strong>
+
+          </div>
+
+
+          {/* LATITUDE */}
+
+          <div>
+
+            <span>
+              Latitude:
+            </span>
+
+            <strong>
+              {
+                Number(
+                  selectedRiskPoint.lat
+                ).toFixed(5)
+              }
+            </strong>
+
+          </div>
+
+
+          {/* LONGITUDE */}
+
+          <div>
+
+            <span>
+              Longitude:
+            </span>
+
+            <strong>
+              {
+                Number(
+                  selectedRiskPoint.lng
+                ).toFixed(5)
+              }
+            </strong>
+
+          </div>
+
+
+          {/* OPTIONAL RAINFALL */}
+
+          {selectedRiskPoint.rainfall != null && (
+
+            <div>
+
+              <span>
+                Rainfall:
+              </span>
+
+              <strong>
+                {selectedRiskPoint.rainfall} mm
+              </strong>
+
+            </div>
+
+          )}
+
+
+          {/* OPTIONAL LAST UPDATED */}
+
+          {selectedRiskPoint.lastUpdated && (
+
+            <div>
+
+              <span>
+                Last Updated:
+              </span>
+
+              <strong>
+
+                {
+                  new Date(
+                    selectedRiskPoint.lastUpdated
+                  ).toLocaleString()
+                }
+
+              </strong>
+
+            </div>
+
+          )}
+
+
         </div>
+
       )}
+
+
+      {/* ================================
+          DATA TIMESTAMP
+      ================================= */}
+
+      {lastFetched && (
+
+        <div className="map-last-updated">
+
+          Data refreshed:{" "}
+
+          {
+            lastFetched.toLocaleTimeString()
+          }
+
+        </div>
+
+      )}
+
+
     </div>
+
   );
+
 }
 
+
 export default Heatmap;
+

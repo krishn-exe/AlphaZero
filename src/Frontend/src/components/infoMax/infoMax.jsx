@@ -8,7 +8,7 @@ function InfoMax() {
     { icon: 'location.png', value: '78', labelKey: 'infoMax.monitoredLocations' },
     { icon: 'warning.png', value: '26', labelKey: 'infoMax.highRiskLocations' },
     { icon: 'time-left.png', value: '24/7', labelKey: 'infoMax.continuousMonitoring' },
-    { icon: 'chart.png', value: '99%', labelKey: 'infoMax.predictionAccuracy' },
+    { icon: 'chart.png', value: '97%', labelKey: 'infoMax.predictionAccuracy' },
   ];
 
   return (
