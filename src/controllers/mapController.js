@@ -36,7 +36,6 @@ async function getNationalHeatmap(req, res) {
         riskScore: d.riskScore,
         riskLevel: d.riskLevel,
         rainfall: d.rainfall,
-        confidence: d.confidence,
         computedAt: d.computedAt,
         lastUpdated: d.lastUpdated,
       },
@@ -85,13 +84,10 @@ async function getDistrictDetail(req, res) {
 async function updateDistrictRisk(req, res) {
   try {
     const { id } = req.params;
-    const { riskScore, confidence, computedAt, rainfall } = req.body;
+    const { riskScore, computedAt, rainfall } = req.body;
 
     if (typeof riskScore !== 'number' || riskScore < 0 || riskScore > 100) {
       return res.status(400).json({ error: 'riskScore must be a number between 0 and 100' });
-    }
-    if (confidence !== undefined && (typeof confidence !== 'number' || confidence < 0 || confidence > 1)) {
-      return res.status(400).json({ error: 'confidence must be a number between 0 and 1' });
     }
 
     // Fetch previous risk level to detect escalation
@@ -111,7 +107,6 @@ async function updateDistrictRisk(req, res) {
         riskScore,
         riskLevel: newRiskLevel,
         rainfall: rainfall !== undefined ? rainfall : undefined,
-        confidence: confidence ?? undefined,
         computedAt: computedAt ? new Date(computedAt) : undefined,
       },
     });
@@ -172,7 +167,6 @@ async function getDistrictCities(req, res) {
         riskScore: c.riskScore,
         riskLevel: c.riskLevel,
         rainfall: c.rainfall,
-        confidence: c.confidence,
         computedAt: c.computedAt,
         lastUpdated: c.lastUpdated,
       },
@@ -196,13 +190,10 @@ async function getDistrictCities(req, res) {
 async function updateCityRisk(req, res) {
   try {
     const { id } = req.params;
-    const { riskScore, confidence, computedAt, rainfall } = req.body;
+    const { riskScore, computedAt, rainfall } = req.body;
 
     if (typeof riskScore !== 'number' || riskScore < 0 || riskScore > 100) {
       return res.status(400).json({ error: 'riskScore must be a number between 0 and 100' });
-    }
-    if (confidence !== undefined && (typeof confidence !== 'number' || confidence < 0 || confidence > 1)) {
-      return res.status(400).json({ error: 'confidence must be a number between 0 and 1' });
     }
 
     const previousCity = await prisma.city.findUnique({
@@ -222,7 +213,6 @@ async function updateCityRisk(req, res) {
         riskScore,
         riskLevel: newRiskLevel,
         rainfall: rainfall !== undefined ? rainfall : undefined,
-        confidence: confidence ?? undefined,
         computedAt: computedAt ? new Date(computedAt) : undefined,
       },
     });
@@ -384,6 +374,16 @@ async function receiveNationalPredictions(req, res) {
   }
 }
 
+async function getRiskData(req, res) {
+  try {
+    const data = await prisma.gridPrediction.findMany();
+    res.json(data);
+  } catch (err) {
+    console.error('getRiskData error:', err);
+    res.status(500).json({ error: 'Failed to fetch risk data' });
+  }
+}
+
 module.exports = {
   getNationalHeatmap,
   getTopRiskDistricts,
@@ -395,4 +395,5 @@ module.exports = {
   getRiskLevel,
   triggerManualAlert,
   receiveNationalPredictions,
+  getRiskData,
 };

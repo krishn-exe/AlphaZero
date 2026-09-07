@@ -17,6 +17,7 @@ const {
   updateCityRisk,
   triggerManualAlert,
   receiveNationalPredictions,
+  getRiskData,
 } = require('../controllers/mapController');
 
 // Public reads — frontend hits these, no auth needed

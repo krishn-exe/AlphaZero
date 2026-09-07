@@ -23,6 +23,7 @@ app.use('/api/map', mapRoutes);
 app.use('/api/incidents', incidentRoutes);
 app.use('/api/subscribe', subscribeRoutes);
 app.use('/api/admin', adminAuthRoutes);
+app.get('/api/risk-data', require('./controllers/mapController').getRiskData);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
