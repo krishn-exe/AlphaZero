@@ -12,7 +12,7 @@ function HowItWorks() {
   ];
 
   return (
-    <div className='papa-container'>
+    <div   id='about' className='papa-container'>
       <div className='top'>
         <img src='/info-icons/user-manual.png' className='imgHow' />
         <div>{t('howItWorks.title')}</div>
