@@ -73,6 +73,10 @@
       "structural_damage": "संरचनात्मक क्षति",
       "other": "अन्य"
     },
+    "photoLabel": "फोटो (वैकल्पिक)",
+    "uploadPrompt": "फोटो थप्न ट्याप गर्नुहोस्",
+    "photoErrorType": "कृपया एक छवि फाइल अपलोड गर्नुहोस्।",
+    "photoErrorSize": "छवि ५ एमबी भन्दा कम हुनुपर्छ।",
     "descriptionLabel": "विवरण *",
     "descriptionPlaceholder": "जस्तै, राजमार्गमा रुख लडेको छ...",
     "latitudeLabel": "अक्षांश (Latitude) *",

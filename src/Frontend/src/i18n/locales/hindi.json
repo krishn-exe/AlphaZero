@@ -73,6 +73,10 @@
       "structural_damage": "ढांचागत क्षति",
       "other": "अन्य"
     },
+    "photoLabel": "फ़ोटो (वैकल्पिक)",
+    "uploadPrompt": "फ़ोटो जोड़ने के लिए टैप करें",
+    "photoErrorType": "कृपया एक छवि फ़ाइल अपलोड करें।",
+    "photoErrorSize": "छवि 5MB से कम होनी चाहिए।",
     "descriptionLabel": "विवरण *",
     "descriptionPlaceholder": "उदा. मील मार्कर 4 के पास हाईवे पर पेड़ गिर गया...",
     "latitudeLabel": "अक्षांश (Latitude) *",

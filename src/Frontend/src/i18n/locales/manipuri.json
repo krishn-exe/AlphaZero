@@ -44,6 +44,10 @@
       "structural_damage": "Structural Damage",
       "other": "Other"
     },
+    "photoLabel": "Photo (optional)",
+    "uploadPrompt": "Tap to add a photo",
+    "photoErrorType": "Please upload an image file.",
+    "photoErrorSize": "Image must be under 5MB.",
     "descriptionLabel": "Description *",
     "descriptionPlaceholder": "E.g., Tree fell across the highway near mile marker 4...",
     "latitudeLabel": "Latitude *",

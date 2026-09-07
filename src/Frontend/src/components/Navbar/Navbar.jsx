@@ -27,7 +27,7 @@ function Navbar() {
     <>
       <nav className="navbar">
         <div className="navbar-logo" onClick={() => { navigate('/'); scrollToSection('home'); }} style={{ cursor: 'pointer' }}>
-          <span className="navbar-brand">BhuRakshak</span>
+          <span className="navbar-brand">Bhu Rakshak</span>
         </div>
 
         <button

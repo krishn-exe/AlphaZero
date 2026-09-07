@@ -73,6 +73,10 @@
       "structural_damage": "কাঠামোগত ক্ষতি",
       "other": "অন্যান্য"
     },
+    "photoLabel": "ছবি (ঐচ্ছিক)",
+    "uploadPrompt": "ছবি যোগ করতে ট্যাপ করুন",
+    "photoErrorType": "অনুগ্রহ করে একটি ছবি ফাইল আপলোড করুন।",
+    "photoErrorSize": "ছবির আকার ৫ এমবি-র কম হতে হবে।",
     "descriptionLabel": "বিবরণ *",
     "descriptionPlaceholder": "যেমন, হাইওয়েতে গাছ ভেঙে রাস্তা বন্ধ...",
     "latitudeLabel": "অক্ষাংশ (Latitude) *",

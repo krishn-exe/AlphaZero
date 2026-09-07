@@ -73,6 +73,10 @@
       "structural_damage": "গাঁথনিগত ক্ষতি",
       "other": "অন্যান্য"
     },
+    "photoLabel": "ফটো (ঐচ্ছিক)",
+    "uploadPrompt": "ফটো যোগ কৰিবলৈ টেপ কৰক",
+    "photoErrorType": "অনুগ্ৰহ কৰি এখন ছবি ফাইল আপলোড কৰক।",
+    "photoErrorSize": "ছবিৰ আকাৰ ৫ এমবিৰ কম হ’ব লাগিব।",
     "descriptionLabel": "বিৱৰণ *",
     "descriptionPlaceholder": "যেনে, ঘাইপথত গছ ভাঙি পৰিছে...",
     "latitudeLabel": "অক্ষাংশ (Latitude) *",

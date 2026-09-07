@@ -4,28 +4,25 @@ import './ReportIncident.css';
 
 // MOCK API ABSTRACTION
 const mockApi = {
-  submitIncident: async (data) => {
+  submitIncident: async (formDataPayload) => {
     try {
       const response = await fetch('/api/incidents', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
+        body: formDataPayload, // FormData sets its own multipart Content-Type header — don't set it manually
       });
-      
+
       if (!response.ok) {
         if (response.status === 404) {
           console.warn("Mock Mode: /api/incidents not found. Simulating successful submission.");
-          return new Promise(resolve => setTimeout(() => resolve({ id: Date.now(), ...data, status: 'pending' }), 1000));
+          return new Promise(resolve => setTimeout(() => resolve({ id: Date.now(), status: 'pending' }), 1000));
         }
         throw new Error('Failed to submit incident to server');
       }
-      
+
       return await response.json();
     } catch (error) {
       console.warn("Mock Mode: Network error, falling back to simulated success for demo purposes.", error);
-      return new Promise(resolve => setTimeout(() => resolve({ id: Date.now(), ...data, status: 'pending' }), 1000));
+      return new Promise(resolve => setTimeout(() => resolve({ id: Date.now(), status: 'pending' }), 1000));
     }
   }
 };
@@ -40,6 +37,9 @@ function ReportIncident() {
     longitude: ''
   });
 
+  const [photo, setPhoto] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+
   const [status, setStatus] = useState('idle');
   const [errorKey, setErrorKey] = useState('');
 
@@ -49,6 +49,33 @@ function ReportIncident() {
       ...prev,
       [name]: value
     }));
+  };
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setStatus('error');
+      setErrorKey('reportPage.photoErrorType');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setStatus('error');
+      setErrorKey('reportPage.photoErrorSize');
+      return;
+    }
+
+    setPhoto(file);
+    setPhotoPreview(URL.createObjectURL(file));
+    setStatus('idle');
+    setErrorKey('');
+  };
+
+  const removePhoto = () => {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhoto(null);
+    setPhotoPreview(null);
   };
 
   const getLocation = () => {
@@ -82,12 +109,12 @@ function ReportIncident() {
       return;
     }
 
-    const payload = {
-      description: formData.description,
-      category: formData.category,
-      latitude: parseFloat(formData.latitude),
-      longitude: parseFloat(formData.longitude)
-    };
+    const payload = new FormData();
+    payload.append('description', formData.description);
+    payload.append('category', formData.category);
+    payload.append('latitude', parseFloat(formData.latitude));
+    payload.append('longitude', parseFloat(formData.longitude));
+    if (photo) payload.append('photo', photo);
 
     try {
       await mockApi.submitIncident(payload);
@@ -98,6 +125,7 @@ function ReportIncident() {
         latitude: '',
         longitude: ''
       });
+      removePhoto();
     } catch (error) {
       console.error(error);
       setStatus('error');
@@ -114,7 +142,7 @@ function ReportIncident() {
 
       <div className="report-card">
         <form onSubmit={handleSubmit}>
-          
+
           <div className="form-group">
             <label htmlFor="category">{t('reportPage.categoryLabel')}</label>
             <select
@@ -143,6 +171,32 @@ function ReportIncident() {
               value={formData.description}
               onChange={handleChange}
               required
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="photo">{t('reportPage.photoLabel')}</label>
+            {photoPreview ? (
+              <div className="photo-preview-wrapper">
+                <img src={photoPreview} alt="Incident preview" className="photo-preview" />
+                <button type="button" onClick={removePhoto} className="photo-remove-btn">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+            ) : (
+              <label htmlFor="photo" className="photo-upload-placeholder">
+                <span className="material-symbols-outlined">photo_camera</span>
+                {t('reportPage.uploadPrompt')}
+              </label>
+            )}
+            <input
+              type="file"
+              id="photo"
+              name="photo"
+              accept="image/*"
+              capture="environment"
+              onChange={handlePhotoChange}
+              style={{ display: 'none' }}
             />
           </div>
 
@@ -176,10 +230,10 @@ function ReportIncident() {
               />
             </div>
           </div>
-          
+
           <div className="form-group" style={{ marginTop: '-12px' }}>
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={getLocation}
               style={{
                 background: 'none',
@@ -198,8 +252,8 @@ function ReportIncident() {
             </button>
           </div>
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             className="btn-submit"
             disabled={status === 'submitting'}
           >
