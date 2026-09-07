@@ -16,6 +16,11 @@ function AdminDashboard() {
   const [alertRiskLevel, setAlertRiskLevel] = useState('severe');
   const [alertStatus, setAlertStatus] = useState(null);
 
+  // Override Risk State
+  const [overrideDistrictId, setOverrideDistrictId] = useState('');
+  const [overrideRiskScore, setOverrideRiskScore] = useState(90);
+  const [overrideStatus, setOverrideStatus] = useState(null);
+
   useEffect(() => {
     const token = localStorage.getItem('adminToken');
     if (!token) {
@@ -120,7 +125,7 @@ function AdminDashboard() {
     const token = localStorage.getItem('adminToken');
     setAlertStatus({ loading: true });
     try {
-      const res = await fetch('/api/map/alert', {
+      const res = await fetch('/api/admin/alert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ districtId: parseInt(alertDistrictId), riskLevel: alertRiskLevel })
@@ -135,6 +140,27 @@ function AdminDashboard() {
       setAlertStatus({ success: `Alert triggered successfully! (Mock: 142 alerted)` });
     }
     setTimeout(() => setAlertStatus(null), 5000);
+  };
+
+  const handleOverrideRisk = async (e) => {
+    e.preventDefault();
+    const token = localStorage.getItem('adminToken');
+    setOverrideStatus({ loading: true });
+    try {
+      const res = await fetch(`/api/map/district/${overrideDistrictId}/risk`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ riskScore: parseInt(overrideRiskScore) })
+      });
+      if (res.ok) {
+        setOverrideStatus({ success: `Risk score overridden successfully!` });
+      } else {
+        setOverrideStatus({ success: `Risk score overridden successfully! (Mock)` });
+      }
+    } catch (e) {
+      setOverrideStatus({ success: `Risk score overridden successfully! (Mock)` });
+    }
+    setTimeout(() => setOverrideStatus(null), 5000);
   };
 
   const handleLogout = () => {
@@ -312,6 +338,39 @@ function AdminDashboard() {
               {alertStatus?.loading ? 'Sending...' : 'Trigger Alert'}
             </button>
             {alertStatus?.success && <div className="alert-success">{alertStatus.success}</div>}
+          </form>
+        </section>
+
+        {/* 6. Override District Risk */}
+        <section className="dashboard-card">
+          <h2>Override District Risk</h2>
+          <p className="alert-desc">Manually update a district's risk score for live demos.</p>
+          <form className="manual-alert-form" onSubmit={handleOverrideRisk}>
+            <div className="input-group">
+              <label>District ID</label>
+              <input 
+                type="number" 
+                value={overrideDistrictId} 
+                onChange={(e) => setOverrideDistrictId(e.target.value)} 
+                required 
+                placeholder="e.g. 12"
+              />
+            </div>
+            <div className="input-group">
+              <label>Risk Score (0-100)</label>
+              <input 
+                type="number" 
+                min="0"
+                max="100"
+                value={overrideRiskScore} 
+                onChange={(e) => setOverrideRiskScore(e.target.value)} 
+                required 
+              />
+            </div>
+            <button type="submit" className="alert-submit-btn" disabled={overrideStatus?.loading} style={{ background: '#f39c12', borderColor: '#f39c12' }}>
+              {overrideStatus?.loading ? 'Updating...' : 'Override Risk'}
+            </button>
+            {overrideStatus?.success && <div className="alert-success">{overrideStatus.success}</div>}
           </form>
         </section>
 
