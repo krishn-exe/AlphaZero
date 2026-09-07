@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Landslide Risk Monitoring -- Data Pipeline Configuration
+# Landslide Risk Monitoring -- Configuration
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Region Definitions ────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ regions:
 
 # ── Google Earth Engine ───────────────────────────────────────────────────────
 gee:
-  project_id: "YOUR_PROJECT_ID"  # Replace with your GEE project ID
+  project_id: "alphazero-506716"
   # For service account auth (unattended runs), uncomment and set:
   # credentials_path: "path/to/service-account-key.json"
 
@@ -54,3 +54,10 @@ earthquake:
 output:
   directory: "data"
   filename: "output.csv"
+
+# ── Server Push ───────────────────────────────────────────────────────────────
+# Endpoint that receives POST requests with prediction results.
+server:
+  url: "https://land-slide-sih26.onrender.com/api/map/national"
+  # Optional API key for Authorization header (leave empty if not required)
+  api_key: ""

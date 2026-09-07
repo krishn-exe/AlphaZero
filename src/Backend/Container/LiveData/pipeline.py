@@ -106,15 +106,20 @@ def setup_logging():
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+CONTAINER_DIR = SCRIPT_DIR.parent
 
 
 def load_config(config_path: str = "config.yaml") -> dict:
     path = Path(config_path)
-    # If path doesn't exist relative to CWD, check relative to the script's directory
+    # Search order: CWD → SCRIPT_DIR → CONTAINER_DIR (parent)
     if not path.is_absolute() and not path.exists():
         candidate = SCRIPT_DIR / config_path
         if candidate.exists():
             path = candidate
+        else:
+            candidate = CONTAINER_DIR / config_path
+            if candidate.exists():
+                path = candidate
 
     if not path.exists():
         logger.error(f"Config file not found: {path.resolve()}")
@@ -123,10 +128,10 @@ def load_config(config_path: str = "config.yaml") -> dict:
     with open(path, "r") as f:
         config = yaml.safe_load(f)
 
-    # Ensure output directory resolves relative to SCRIPT_DIR if specified as relative
+    # Ensure output directory resolves relative to CONTAINER_DIR if specified as relative
     out_dir_path = Path(config["output"]["directory"])
     if not out_dir_path.is_absolute():
-        config["output"]["directory"] = str((SCRIPT_DIR / out_dir_path).resolve())
+        config["output"]["directory"] = str((CONTAINER_DIR / out_dir_path).resolve())
 
     return config
 

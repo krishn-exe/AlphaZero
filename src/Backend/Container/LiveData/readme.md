@@ -1,11 +1,8 @@
 
 ## 1. Authenticate Earth Engine
-
-Ensure your Google Earth Engine account is authorized and your `project_id` is set in `config.yaml`:
-
 ```powershell
-..\.venv\Scripts\earthengine.exe authenticate
-```
+# From the Container directory:
+.\.venv\Scripts\earthengine.exe authenticate
 
 Select your Google account in the browser and grant permission.
 

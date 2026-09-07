@@ -7,6 +7,8 @@ model_path = os.path.join(BASE_DIR, 'landslide_model.pkl')
 model = joblib.load(model_path)
 
 
+input_df = pd.read_csv(os.path.join(BASE_DIR, '..', '..', 'data', 'output.csv'))
+
 # input fetch karke 'input_df' m store kr lena 
 
 
