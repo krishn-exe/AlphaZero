@@ -66,6 +66,8 @@
     "title": "Report an Incident",
     "subtitle": "Help us monitor landslide risks and road blockages by reporting incidents in your area.",
     "categoryLabel": "Incident Category *",
+     "districtLabel": "District",
+"districtPlaceholder": "Select your district",
     "categories": {
       "road_blockage": "Road Blockage",
       "landslide": "Landslide",
@@ -90,4 +92,5 @@
     "errorRequired": "Please fill in all required fields.",
     "errorGeneric": "An error occurred while submitting the report. Please try again."
   }
+ 
 }

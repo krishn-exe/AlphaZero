@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { NER_DISTRICTS } from '../data/districts';
 import './ReportIncident.css';
 
 // MOCK API ABSTRACTION
@@ -33,6 +34,7 @@ function ReportIncident() {
   const [formData, setFormData] = useState({
     description: '',
     category: 'road_blockage',
+    district:'',
     latitude: '',
     longitude: ''
   });
@@ -103,14 +105,15 @@ function ReportIncident() {
     setStatus('submitting');
     setErrorKey('');
 
-    if (!formData.description || !formData.category || !formData.latitude || !formData.longitude) {
-      setStatus('error');
-      setErrorKey('reportPage.errorRequired');
-      return;
-    }
+   if (!formData.description || !formData.category || !formData.district || !formData.latitude || !formData.longitude) {
+  setStatus('error');
+  setErrorKey('reportPage.errorRequired');
+  return;
+}
 
     const payload = new FormData();
     payload.append('description', formData.description);
+    payload.append('district', formData.district);
     payload.append('category', formData.category);
     payload.append('latitude', parseFloat(formData.latitude));
     payload.append('longitude', parseFloat(formData.longitude));
@@ -119,12 +122,13 @@ function ReportIncident() {
     try {
       await mockApi.submitIncident(payload);
       setStatus('success');
-      setFormData({
-        description: '',
-        category: 'road_blockage',
-        latitude: '',
-        longitude: ''
-      });
+     setFormData({
+  description: '',
+  category: 'road_blockage',
+  district: '',
+  latitude: '',
+  longitude: ''
+});
       removePhoto();
     } catch (error) {
       console.error(error);
@@ -173,7 +177,26 @@ function ReportIncident() {
               required
             />
           </div>
-
+<div className="form-group">
+  <label htmlFor="district">{t('reportPage.districtLabel')}</label>
+  <select
+    id="district"
+    name="district"
+    className="form-control"
+    value={formData.district}
+    onChange={handleChange}
+    required
+  >
+    <option value="" disabled>{t('reportPage.districtPlaceholder')}</option>
+    {NER_DISTRICTS.map((group) => (
+      <optgroup key={group.state} label={group.state}>
+        {group.districts.map((district) => (
+          <option key={district} value={district}>{district}</option>
+        ))}
+      </optgroup>
+    ))}
+  </select>
+</div>
           <div className="form-group">
             <label htmlFor="photo">{t('reportPage.photoLabel')}</label>
             {photoPreview ? (

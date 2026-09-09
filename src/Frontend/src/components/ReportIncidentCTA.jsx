@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import './reportIncidentCTA.css';
-
 import disasterGraphic from '../assets/images/disaster.png';
 
 function ReportIncidentCTA() {
