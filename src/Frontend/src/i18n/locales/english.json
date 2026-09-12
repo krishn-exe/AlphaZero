@@ -91,6 +91,20 @@
     "successMsg": "Your incident report has been submitted successfully. Authorities have been notified.",
     "errorRequired": "Please fill in all required fields.",
     "errorGeneric": "An error occurred while submitting the report. Please try again."
-  }
- 
+  },
+  "feedPage": {
+  "title": "Verified Reports",
+  "subtitle": "Incidents verified by authorities, searchable by district.",
+  "filterLabel": "Filter by district",
+  "allDistricts": "All districts",
+  "loading": "Loading reports...",
+  "errorGeneric": "Couldn't load reports. Please try again.",
+  "empty": "No verified reports found for this district yet.",
+  "verified": "Verified",
+  "viewReport": "View Report",
+  "noPhoto": "No photo attached"
+},
+ "home": {
+  "viewFeed": "View Incident Feed"
+}
 }

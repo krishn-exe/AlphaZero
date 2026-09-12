@@ -5,7 +5,7 @@ import ReportIncident from './pages/ReportIncident.jsx'
 import AdminLogin from './pages/AdminLogin.jsx'
 import AdminDashboard from './pages/AdminDashboard.jsx'
 import Footer from './components/Footer/Footer.jsx'
-
+import IncidentFeed from './pages/IncidentFeed.jsx';
 function App(){
   return (
     <>
@@ -15,6 +15,7 @@ function App(){
         <Route path="/report" element={<ReportIncident />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/feed" element={<IncidentFeed />} />
       </Routes>
       <Footer/>
     </>
