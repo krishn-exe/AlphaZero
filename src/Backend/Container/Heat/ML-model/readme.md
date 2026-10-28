@@ -1,0 +1,1 @@
+.venv\Scripts\python.exe Heat\run.py --daemon

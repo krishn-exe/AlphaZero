@@ -56,8 +56,7 @@ output:
   filename: "output.csv"
 
 # ── Server Push ───────────────────────────────────────────────────────────────
-# Endpoint that receives POST requests with prediction results.
+
 server:
   url: "https://land-slide-sih26.onrender.com/api/map/national"
-  # Optional API key for Authorization header (leave empty if not required)
-  api_key: ""
+  api_key: "814fc16bd6f035710cc3fa0156f53291f11540e713d7456f"
