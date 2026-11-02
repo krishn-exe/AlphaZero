@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const checkApiKey = require('../middleware/checkApiKey');
 const rateLimit = require('express-rate-limit');
+const checkAdminAuth = require('../middleware/checkAdminAuth');
 const {
   createIncident,
   getIncidents,
@@ -26,8 +26,6 @@ router.get('/:id', getIncidentById);
 
 // Public write endpoints (rate-limited to prevent spam)
 router.post('/', submitLimiter, createIncident);
-
-const checkAdminAuth = require('../middleware/checkAdminAuth');
 
 // Protected admin endpoints
 router.patch('/:id/status', checkAdminAuth, updateIncidentStatus);

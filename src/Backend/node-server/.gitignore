@@ -26,6 +26,10 @@ dist/
 build/
 out/
 
+# Storage
+storage/predictions/*
+!storage/predictions/.gitkeep
+
 # Prisma
 # Ignore the generated Prisma Client (if generated to a custom location)
 # prisma/client/
@@ -47,4 +51,3 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
-

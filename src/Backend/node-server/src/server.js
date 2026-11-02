@@ -8,6 +8,7 @@ const mapRoutes = require('./routes/mapRoutes');
 const incidentRoutes = require('./routes/incidentRoutes');
 const subscribeRoutes = require('./routes/subscribeRoutes');
 const adminAuthRoutes = require('./routes/adminAuthRoutes');
+const { getNationalHeatmap } = require('./controllers/mapController');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -21,12 +22,13 @@ app.use(express.json());
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-const { getGridPredictions, getNationalHeatmap } = require('./controllers/mapController');
-
-app.get('/api/risk-data', getGridPredictions);
+// Public Heatmap shortcuts
 app.get('/data/national', getNationalHeatmap);
 app.get('/api/data/national', getNationalHeatmap);
+
+// Routes
 app.use('/api/map', mapRoutes);
+app.use('/api/predictions', mapRoutes); // Alias for predictions endpoint
 app.use('/api/incidents', incidentRoutes);
 app.use('/api/subscribe', subscribeRoutes);
 app.use('/api/admin', adminAuthRoutes);

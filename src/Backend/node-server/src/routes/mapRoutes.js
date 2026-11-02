@@ -1,37 +1,37 @@
 const express = require('express');
 const router = express.Router();
-const checkApiOrAdmin = require('../middleware/checkApiOrAdmin');
-const checkAdminAuth = require('../middleware/checkAdminAuth');
 const multer = require('multer');
 
-const upload = multer({ storage: multer.memoryStorage() });
-
-
+const checkApiOrAdmin = require('../middleware/checkApiOrAdmin');
+const checkAdminAuth = require('../middleware/checkAdminAuth');
+const { receivePredictions } = require('../controllers/predictionController');
 const {
   getNationalHeatmap,
   getTopRiskDistricts,
   getRiskStats,
   getDistrictDetail,
   updateDistrictRisk,
-  getDistrictCities,
-  updateCityRisk,
   triggerManualAlert,
-  receiveNationalPredictions,
 } = require('../controllers/mapController');
 
-// Public reads — frontend hits these, no auth needed
+// Multer memory storage: uploads are validated in-memory before persisting
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+});
+
+// Public reads — frontend hits these
 router.get('/national', getNationalHeatmap);
 router.get('/top-risk', getTopRiskDistricts);
 router.get('/stats', getRiskStats);
 router.get('/district/:id', getDistrictDetail);
-router.get('/district/:id/cities', getDistrictCities);
 
-// Writes — guarded by combined middleware (AIML pipeline or Admin dashboard)
-router.post('/national', upload.single('data'), receiveNationalPredictions);
+// AIML Predictions Upload — receives 3-column CSV on IST schedule
+router.post('/national', upload.any(), receivePredictions);
+router.post('/predictions', upload.any(), receivePredictions);
+
+// Admin manual overrides & alerts
 router.put('/district/:id/risk', checkApiOrAdmin, updateDistrictRisk);
-router.put('/city/:id/risk', checkApiOrAdmin, updateCityRisk);
-
-// Admin manual alert trigger (Dashboard only)
 router.post('/alert', checkAdminAuth, triggerManualAlert);
 
 module.exports = router;

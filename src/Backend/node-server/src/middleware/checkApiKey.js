@@ -1,13 +1,17 @@
 /**
- * Guards the PUT endpoints that AIML's pipeline calls to push risk scores.
- * Not full user auth — just a shared secret so random requests can't
- * overwrite risk data. Good enough for a hackathon-scoped internal endpoint.
- *
- * AIML includes this header on every PUT call:
- *   x-api-key: <value of AIML_API_KEY from your .env>
+ * Flexible API Key authentication middleware.
+ * Checks for key in:
+ * - req.body.key (multipart or json body)
+ * - req.headers['x-api-key']
+ * - req.headers.authorization (Bearer <key>)
+ * - req.query.key
  */
 function checkApiKey(req, res, next) {
-  const key = req.header('x-api-key');
+  const key =
+    req.body?.key ||
+    req.headers['x-api-key'] ||
+    (req.headers.authorization && req.headers.authorization.replace(/^Bearer\s+/i, '')) ||
+    req.query?.key;
 
   if (!process.env.AIML_API_KEY) {
     console.error('AIML_API_KEY is not set in .env — refusing all writes');
