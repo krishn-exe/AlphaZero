@@ -66,6 +66,7 @@ OUTPUT_COLUMNS = [
     "Fetch_Timestamp",
     "Rainfall_mm",
     "Rainfall_3Day",
+    "Rainfall_7Day",
     "Slope_Angle",
     "Soil_Saturation",
     "Vegetation_Cover",

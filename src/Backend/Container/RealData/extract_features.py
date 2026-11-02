@@ -262,6 +262,7 @@ def sample_historical_gee_features(
     res_df = pd.DataFrame(index=df.index)
     res_df["Rainfall_mm"] = 0.0
     res_df["Rainfall_3Day"] = 0.0
+    res_df["Rainfall_7Day"] = 0.0
     res_df["NDVI_Index"] = 0.5
     res_df["Vegetation_Cover"] = 0.5
     res_df["Soil_Moisture_Content"] = 0.25
@@ -290,11 +291,14 @@ def sample_historical_gee_features(
         d = ee.Date(feat.get("date"))
         geom = feat.geometry()
 
-        # Rainfall (24h & 3-Day cumulative) via CHIRPS
+        # Rainfall (24h, 3-Day & 7-Day cumulative) via CHIRPS
         r24 = chirps.filterDate(d, d.advance(1, "day")).sum().reduceRegion(
             ee.Reducer.first(), geom, 5000
         ).get("precipitation")
         r3d = chirps.filterDate(d.advance(-2, "day"), d.advance(1, "day")).sum().reduceRegion(
+            ee.Reducer.first(), geom, 5000
+        ).get("precipitation")
+        r7d = chirps.filterDate(d.advance(-6, "day"), d.advance(1, "day")).sum().reduceRegion(
             ee.Reducer.first(), geom, 5000
         ).get("precipitation")
 
@@ -319,15 +323,19 @@ def sample_historical_gee_features(
         e_img_safe = ee.Image(ee.Algorithms.If(e_img, e_img, ee.Image.constant(0)))
         e_stats = e_img_safe.reduceRegion(ee.Reducer.first(), geom, 11132)
 
-        # ERA5 3-day rainfall fallback (m -> mm)
+        # ERA5 3-day and 7-day rainfall fallback (m -> mm)
         e3d_sum = era5.filterDate(d.advance(-2, "day"), d.advance(1, "day")).select("total_precipitation_sum").sum()
         e3d_val = e3d_sum.reduceRegion(ee.Reducer.first(), geom, 11132).get("total_precipitation_sum")
+        e7d_sum = era5.filterDate(d.advance(-6, "day"), d.advance(1, "day")).select("total_precipitation_sum").sum()
+        e7d_val = e7d_sum.reduceRegion(ee.Reducer.first(), geom, 11132).get("total_precipitation_sum")
 
         return feat.set({
             "Rainfall_mm": r24,
             "Rainfall_3Day": r3d,
+            "Rainfall_7Day": r7d,
             "era5_precip_m": e_stats.get("total_precipitation_sum"),
             "era5_3d_precip_m": e3d_val,
+            "era5_7d_precip_m": e7d_val,
             "NDVI_Index": ndvi_val,
             "temperature_2m": e_stats.get("temperature_2m"),
             "dewpoint_temperature_2m": e_stats.get("dewpoint_temperature_2m"),
@@ -380,8 +388,10 @@ def sample_historical_gee_features(
                 # 1. Rainfall (CHIRPS primary, ERA5 fallback if outside CHIRPS coverage)
                 r24 = props.get("Rainfall_mm")
                 r3d = props.get("Rainfall_3Day")
+                r7d = props.get("Rainfall_7Day")
                 e_precip = props.get("era5_precip_m")
                 e3d_precip = props.get("era5_3d_precip_m")
+                e7d_precip = props.get("era5_7d_precip_m")
 
                 if r24 is not None:
                     res_df.loc[idx, "Rainfall_mm"] = round(float(r24), 2)
@@ -392,6 +402,11 @@ def sample_historical_gee_features(
                     res_df.loc[idx, "Rainfall_3Day"] = round(float(r3d), 2)
                 elif e3d_precip is not None:
                     res_df.loc[idx, "Rainfall_3Day"] = round(float(e3d_precip) * 1000.0, 2)
+
+                if r7d is not None:
+                    res_df.loc[idx, "Rainfall_7Day"] = round(float(r7d), 2)
+                elif e7d_precip is not None:
+                    res_df.loc[idx, "Rainfall_7Day"] = round(float(e7d_precip) * 1000.0, 2)
 
                 # 2. NDVI & Vegetation Cover
                 ndvi = props.get("NDVI_Index")
