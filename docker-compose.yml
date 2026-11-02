@@ -19,7 +19,7 @@ services:
 
   backend:
     build:
-      context: "./src/backend/Node Server"
+      context: "./src/Backend/node-server"
       dockerfile: Dockerfile
     container_name: landslide-backend
     restart: unless-stopped
