@@ -152,9 +152,11 @@ function IncidentFeed() {
           >
             <option value="">{t('feedPage.allDistricts')}</option>
             {NER_DISTRICTS.map((group) => (
-              <optgroup key={group.state} label={group.state}>
+              <optgroup key={group.state} label={t(`states.${group.state}`, { defaultValue: group.state })}>
                 {group.districts.map((district) => (
-                  <option key={district} value={district}>{district}</option>
+                  <option key={district} value={district}>
+                    {t(`districts.${district}`, { defaultValue: district })}
+                  </option>
                 ))}
               </optgroup>
             ))}
@@ -193,7 +195,7 @@ function IncidentFeed() {
                 </span>
                 {t(`reportPage.categories.${incident.category}`)}
               </div>
-              <h3>{incident.district}</h3>
+              <h3>{t(`districts.${incident.district}`, { defaultValue: incident.district })}</h3>
               <p className="feed-card-description">{incident.description}</p>
               <div className="feed-card-meta">
                 <span>{timeAgo(incident.reportedAt)}</span>
@@ -240,7 +242,7 @@ function IncidentFeed() {
               </span>
               {t(`reportPage.categories.${selected.category}`)}
             </div>
-            <h3>{selected.district}</h3>
+            <h3>{t(`districts.${selected.district}`, { defaultValue: selected.district })}</h3>
             <p>{selected.description}</p>
             <p className="feed-modal-coords">
               <span className="material-symbols-outlined">my_location</span>

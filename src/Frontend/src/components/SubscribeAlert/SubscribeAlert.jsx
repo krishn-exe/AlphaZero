@@ -1,17 +1,9 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { NER_DISTRICTS } from '../../data/districts';
 import './SubscribeAlert.css';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
-
-const districts = [
-  'Guwahati',
-  'Shillong',
-  'Itanagar',
-  'Imphal',
-  'Aizawl',
-  // TODO: replace with full ~130 district list from backend teammate (districts.json)
-];
 
 function SubscribeAlert() {
   const { t } = useTranslation();
@@ -128,10 +120,17 @@ function SubscribeAlert() {
               onChange={(e) => setDistrict(e.target.value)}
             >
               <option value="">{t('subscribe.districtPlaceholder')}</option>
-              {districts.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
+              {NER_DISTRICTS.map((group) => (
+                <optgroup
+                  key={group.state}
+                  label={t(`states.${group.state}`, { defaultValue: group.state })}
+                >
+                  {group.districts.map((d) => (
+                    <option key={d} value={d}>
+                      {t(`districts.${d}`, { defaultValue: d })}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>

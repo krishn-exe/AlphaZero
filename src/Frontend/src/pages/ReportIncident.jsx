@@ -189,9 +189,11 @@ function ReportIncident() {
   >
     <option value="" disabled>{t('reportPage.districtPlaceholder')}</option>
     {NER_DISTRICTS.map((group) => (
-      <optgroup key={group.state} label={group.state}>
+      <optgroup key={group.state} label={t(`states.${group.state}`, { defaultValue: group.state })}>
         {group.districts.map((district) => (
-          <option key={district} value={district}>{district}</option>
+          <option key={district} value={district}>
+            {t(`districts.${district}`, { defaultValue: district })}
+          </option>
         ))}
       </optgroup>
     ))}
