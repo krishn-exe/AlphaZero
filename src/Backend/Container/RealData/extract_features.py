@@ -121,43 +121,68 @@ def fetch_historical_earthquakes_catalog(
     min_lat: float, max_lat: float, min_lon: float, max_lon: float,
     start_year: int, end_year: int
 ) -> list[dict]:
-    """Fetch all earthquakes (M>=2.5) across India for the historical date span."""
-    logger.info(f"Fetching USGS earthquake catalog for India ({start_year}-{end_year})...")
+    """Fetch all earthquakes across the bounding box for the historical date span."""
+    logger.info(f"Fetching USGS earthquake catalog ({start_year}-{end_year})...")
     url = "https://earthquake.usgs.gov/fdsnws/event/1/query"
     earthquakes = []
 
-    # Query in 2-year chunks to respect USGS limit
-    for y in range(start_year, end_year + 1, 2):
-        y_end = min(y + 2, end_year + 1)
+    # Check if bounds cover a large or global area
+    is_global_lon = (max_lon - min_lon >= 350.0) or (min_lon <= -178.0 and max_lon >= 178.0)
+    is_wide_lat = (max_lat - min_lat >= 60.0)
+    is_global = is_global_lon or is_wide_lat
+
+    # Threshold: M>=2.5 for regional queries, M>=4.0 for global (to avoid exceeding USGS 20,000 event limit)
+    min_mag = 4.0 if is_global else 2.5
+    step = 1 if is_global else 2
+
+    # Query in annual chunks to respect USGS limits
+    for y in range(start_year, end_year + 1, step):
+        y_end = min(y + step, end_year + 1)
         params = {
             "format": "geojson",
             "starttime": f"{y}-01-01",
             "endtime": f"{y_end}-01-01",
-            "minmagnitude": 2.5,
-            "minlatitude": min_lat - 2.0,
-            "maxlatitude": max_lat + 2.0,
-            "minlongitude": min_lon - 2.0,
-            "maxlongitude": max_lon + 2.0,
+            "minmagnitude": min_mag,
             "orderby": "time",
         }
-        try:
-            resp = requests.get(url, params=params, timeout=45)
-            resp.raise_for_status()
-            data = resp.json()
-            for feat in data.get("features", []):
-                coords = feat["geometry"]["coordinates"]
-                props = feat["properties"]
-                if props.get("mag") is not None and props.get("time") is not None:
-                    eq_time = datetime.fromtimestamp(props["time"] / 1000.0, tz=timezone.utc)
-                    earthquakes.append({
-                        "longitude": coords[0],
-                        "latitude": coords[1],
-                        "magnitude": props["mag"],
-                        "time": eq_time,
-                    })
-            logger.info(f"  USGS {y}-{y_end}: retrieved {len(data.get('features', []))} events.")
-        except Exception as exc:
-            logger.warning(f"  USGS fetch failed for {y}-{y_end}: {exc}")
+
+        # Longitude clamping: omit if covering entire globe
+        if not is_global_lon:
+            params["minlongitude"] = max(-180.0, min_lon - 2.0)
+            params["maxlongitude"] = min(180.0, max_lon + 2.0)
+
+        # Latitude clamping
+        q_min_lat = max(-90.0, min_lat - 2.0)
+        q_max_lat = min(90.0, max_lat + 2.0)
+        if q_min_lat > -90.0:
+            params["minlatitude"] = q_min_lat
+        if q_max_lat < 90.0:
+            params["maxlatitude"] = q_max_lat
+
+        for attempt_mag in [min_mag, min_mag + 0.5]:
+            params["minmagnitude"] = attempt_mag
+            try:
+                resp = requests.get(url, params=params, timeout=45)
+                resp.raise_for_status()
+                data = resp.json()
+                for feat in data.get("features", []):
+                    coords = feat["geometry"]["coordinates"]
+                    props = feat["properties"]
+                    if props.get("mag") is not None and props.get("time") is not None:
+                        eq_time = datetime.fromtimestamp(props["time"] / 1000.0, tz=timezone.utc)
+                        earthquakes.append({
+                            "longitude": coords[0],
+                            "latitude": coords[1],
+                            "magnitude": props["mag"],
+                            "time": eq_time,
+                        })
+                logger.info(f"  USGS {y}-{y_end} (M>={attempt_mag}): retrieved {len(data.get('features', []))} events.")
+                break
+            except Exception as exc:
+                if attempt_mag == min_mag and is_global:
+                    logger.warning(f"  USGS fetch for {y}-{y_end} failed at M>={attempt_mag} ({exc}), retrying with M>={attempt_mag+0.5}...")
+                else:
+                    logger.warning(f"  USGS fetch failed for {y}-{y_end}: {exc}")
 
     logger.info(f"Total historical earthquakes cached: {len(earthquakes)}")
     return earthquakes
@@ -176,28 +201,44 @@ def compute_historical_earthquake_activity(
     eq_lats = np.array([e["latitude"] for e in earthquakes], dtype=np.float64)
     eq_lons = np.array([e["longitude"] for e in earthquakes], dtype=np.float64)
     eq_mags = np.array([e["magnitude"] for e in earthquakes], dtype=np.float64)
-    eq_times = [e["time"].date() for e in earthquakes]
+    eq_ordinals = np.array([e["time"].date().toordinal() for e in earthquakes], dtype=np.int32)
 
-    # Pre-index earthquakes by year-month for fast lookup
-    for i, row in df.iterrows():
-        event_dt = row["parsed_date"].date()
-        start_dt = event_dt - timedelta(days=lookback_days)
+    df_lats = df["Latitude"].values
+    df_lons = df["Longitude"].values
+    df_ordinals = np.array([dt.date().toordinal() for dt in df["parsed_date"]], dtype=np.int32)
 
-        # Filter earthquakes in 90-day lookback window
-        window_mask = np.array([start_dt <= t <= event_dt for t in eq_times])
-        if not np.any(window_mask):
+    deg_radius = max_radius_km / 111.0 + 0.2
+
+    for i in range(len(df)):
+        ev_ord = df_ordinals[i]
+        start_ord = ev_ord - lookback_days
+
+        # Fast 90-day time window mask
+        time_mask = (eq_ordinals >= start_ord) & (eq_ordinals <= ev_ord)
+        if not np.any(time_mask):
             continue
 
-        w_lats = eq_lats[window_mask]
-        w_lons = eq_lons[window_mask]
-        w_mags = eq_mags[window_mask]
+        w_lats = eq_lats[time_mask]
+        w_lons = eq_lons[time_mask]
+        w_mags = eq_mags[time_mask]
+
+        # Fast degree box pre-filter before Haversine
+        lat_i = df_lats[i]
+        lon_i = df_lons[i]
+        box_mask = (np.abs(w_lats - lat_i) <= deg_radius) & (np.abs(w_lons - lon_i) <= deg_radius * 1.5)
+        if not np.any(box_mask):
+            continue
+
+        c_lats = w_lats[box_mask]
+        c_lons = w_lons[box_mask]
+        c_mags = w_mags[box_mask]
 
         # Compute Haversine distance
-        dists = _haversine_distances_km(w_lats, w_lons, row["Latitude"], row["Longitude"])
+        dists = _haversine_distances_km(c_lats, c_lons, lat_i, lon_i)
         valid_radius = dists <= max_radius_km
 
         if np.any(valid_radius):
-            scores = w_mags[valid_radius] / (1.0 + dists[valid_radius] / 50.0)
+            scores = c_mags[valid_radius] / (1.0 + dists[valid_radius] / 50.0)
             activity[i] = np.sum(scores)
 
     logger.info(f"Earthquake activity: min={activity.min():.2f}, max={activity.max():.2f}, mean={activity.mean():.2f}")
@@ -209,7 +250,7 @@ def compute_historical_earthquake_activity(
 # ==============================================================================
 
 def sample_historical_gee_features(
-    df: pd.DataFrame, batch_size: int = 50, checkpoint_path: Path | None = None
+    df: pd.DataFrame, batch_size: int = 2500, checkpoint_path: Path | None = None
 ) -> pd.DataFrame:
     """
     Extract NDVI, rainfall (24h/3d), soil moisture/saturation, temperature,
@@ -242,13 +283,14 @@ def sample_historical_gee_features(
 
     chirps = ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY").select("precipitation")
     modis = ee.ImageCollection("MODIS/061/MOD13Q1").select("NDVI")
+    avhrr = ee.ImageCollection("NOAA/CDR/AVHRR/NDVI/V5").select("NDVI")
     era5 = ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_RAW")
 
     def sample_all_dynamic(feat):
         d = ee.Date(feat.get("date"))
         geom = feat.geometry()
 
-        # Rainfall (24h & 3-Day cumulative)
+        # Rainfall (24h & 3-Day cumulative) via CHIRPS
         r24 = chirps.filterDate(d, d.advance(1, "day")).sum().reduceRegion(
             ee.Reducer.first(), geom, 5000
         ).get("precipitation")
@@ -256,17 +298,36 @@ def sample_historical_gee_features(
             ee.Reducer.first(), geom, 5000
         ).get("precipitation")
 
-        # MODIS NDVI (16-day window around date)
-        m_img = modis.filterDate(d.advance(-16, "day"), d.advance(16, "day")).mean().multiply(0.0001)
-        ndvi_val = m_img.reduceRegion(ee.Reducer.first(), geom, 500).get("NDVI")
+        # MODIS NDVI (16-day window around date) with AVHRR / fallback for pre-2000 dates
+        m_col = modis.filterDate(d.advance(-16, "day"), d.advance(16, "day"))
+        a_col = avhrr.filterDate(d.advance(-16, "day"), d.advance(16, "day"))
+        ndvi_img = ee.Image(
+            ee.Algorithms.If(
+                m_col.size().gt(0),
+                m_col.mean().multiply(0.0001),
+                ee.Algorithms.If(
+                    a_col.size().gt(0),
+                    a_col.mean().multiply(0.0001),
+                    ee.Image.constant(0.5).rename("NDVI")
+                )
+            )
+        )
+        ndvi_val = ndvi_img.reduceRegion(ee.Reducer.first(), geom, 5000).get("NDVI")
 
-        # ERA5-Land Daily Weather & Soil
+        # ERA5-Land Daily Weather, Soil & Rainfall Fallback (covers 1950-present globally)
         e_img = era5.filterDate(d, d.advance(1, "day")).first()
-        e_stats = e_img.reduceRegion(ee.Reducer.first(), geom, 11132)
+        e_img_safe = ee.Image(ee.Algorithms.If(e_img, e_img, ee.Image.constant(0)))
+        e_stats = e_img_safe.reduceRegion(ee.Reducer.first(), geom, 11132)
+
+        # ERA5 3-day rainfall fallback (m -> mm)
+        e3d_sum = era5.filterDate(d.advance(-2, "day"), d.advance(1, "day")).select("total_precipitation_sum").sum()
+        e3d_val = e3d_sum.reduceRegion(ee.Reducer.first(), geom, 11132).get("total_precipitation_sum")
 
         return feat.set({
             "Rainfall_mm": r24,
             "Rainfall_3Day": r3d,
+            "era5_precip_m": e_stats.get("total_precipitation_sum"),
+            "era5_3d_precip_m": e3d_val,
             "NDVI_Index": ndvi_val,
             "temperature_2m": e_stats.get("temperature_2m"),
             "dewpoint_temperature_2m": e_stats.get("dewpoint_temperature_2m"),
@@ -316,13 +377,21 @@ def sample_historical_gee_features(
                 if idx is None or idx not in res_df.index:
                     continue
 
-                # 1. Rainfall
+                # 1. Rainfall (CHIRPS primary, ERA5 fallback if outside CHIRPS coverage)
                 r24 = props.get("Rainfall_mm")
                 r3d = props.get("Rainfall_3Day")
+                e_precip = props.get("era5_precip_m")
+                e3d_precip = props.get("era5_3d_precip_m")
+
                 if r24 is not None:
                     res_df.loc[idx, "Rainfall_mm"] = round(float(r24), 2)
+                elif e_precip is not None:
+                    res_df.loc[idx, "Rainfall_mm"] = round(float(e_precip) * 1000.0, 2)
+
                 if r3d is not None:
                     res_df.loc[idx, "Rainfall_3Day"] = round(float(r3d), 2)
+                elif e3d_precip is not None:
+                    res_df.loc[idx, "Rainfall_3Day"] = round(float(e3d_precip) * 1000.0, 2)
 
                 # 2. NDVI & Vegetation Cover
                 ndvi = props.get("NDVI_Index")
@@ -414,8 +483,8 @@ def main():
     parser.add_argument(
         "--batch-size", "-b",
         type=int,
-        default=50,
-        help="GEE batch size (default: 50)",
+        default=2500,
+        help="GEE batch size (default: 2500)",
     )
     args = parser.parse_args()
 
