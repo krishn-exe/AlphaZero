@@ -17,6 +17,9 @@ const { startCleanupScheduler } = require('./services/cleanupScheduler');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Trust reverse proxy (Docker Nginx) for accurate client IP in rate limiting
+app.set('trust proxy', 1);
+
 app.use(helmet({
   contentSecurityPolicy: false,
 }));
