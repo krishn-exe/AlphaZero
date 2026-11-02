@@ -1,66 +1,18 @@
 const fs = require('fs');
 const path = require('path');
-
-/**
- * Returns the current time decomposed into Indian Standard Time (IST, UTC+05:30).
- */
-function getIstTime(date = new Date()) {
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-
-  const parts = Object.fromEntries(
-    formatter.formatToParts(date).map((p) => [p.type, p.value])
-  );
-
-  const hour = parseInt(parts.hour, 10);
-  const minute = parseInt(parts.minute, 10);
-  const second = parseInt(parts.second, 10);
-
-  return {
-    year: parts.year,
-    month: parts.month,
-    day: parts.day,
-    hour,
-    minute,
-    second,
-    dateStr: `${parts.year}-${parts.month}-${parts.day}`,
-    timeStr: `${parts.hour}-${parts.minute}-${parts.second}`,
-    formatted: `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second} IST`,
-  };
-}
-
-/**
- * Validates if the given IST time falls on the 4-hour schedule
- * (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 IST) within a 15-minute grace period.
- * Also allows up to 1 minute early buffer for minor clock drift.
- */
-function checkIstScheduleWindow(ist, graceMinutes = 15) {
-  const isScheduledHour = ist.hour % 4 === 0;
-  const isWithinGrace =
-    isScheduledHour && (ist.minute < graceMinutes || (ist.minute === graceMinutes && ist.second === 0));
-  const isEarlyBuffer = ist.hour % 4 === 3 && ist.minute === 59;
-
-  const allowed = isWithinGrace || isEarlyBuffer;
-  const targetHour = isEarlyBuffer ? (ist.hour + 1) % 24 : ist.hour;
-  const windowLabel = `${String(targetHour).padStart(2, '0')}:00 IST`;
-
-  const nextHour = ((Math.floor(ist.hour / 4) + 1) * 4) % 24;
-  const nextWindowLabel = `${String(nextHour).padStart(2, '0')}:00 IST`;
-
-  return {
-    allowed,
-    windowLabel,
-    nextWindowLabel,
-  };
-}
+const {
+  aggregateSlotPredictions,
+  aggregateCsvFiles,
+  parseCsvRows,
+} = require('../services/predictionAggregator');
+const {
+  getSchedulerStatus,
+  getNextAggregationTarget,
+} = require('../services/predictionScheduler');
+const {
+  getIstTime,
+  checkIstScheduleWindow,
+} = require('../utils/timeUtils');
 
 /**
  * Parses and strictly validates that the CSV has 3 columns:
@@ -157,7 +109,7 @@ function parseAndValidateCsv(csvBufferOrString) {
  * - Key authorization
  * - IST schedule window (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 IST with 15m grace period)
  * - Strict CSV validation
- * - Saves CSV into a structured directory (storage/predictions/YYYY-MM-DD/predictions_HH-MM-SS.csv)
+ * - Saves CSV into slot folder structure: storage/predictions/YYYY-MM-DD/HH-00/raw/
  */
 async function receivePredictions(req, res) {
   try {
@@ -219,34 +171,53 @@ async function receivePredictions(req, res) {
       });
     }
 
-    // 5. Store CSV file into folder structure: storage/predictions/YYYY-MM-DD/
+    // 5. Store CSV file into folder structure:
+    //    storage/predictions/YYYY-MM-DD/HH-00/raw/predictions_YYYY-MM-DD_HH-mm-ss.csv
     const baseStorageDir =
       process.env.PREDICTIONS_STORAGE_DIR ||
       path.join(__dirname, '../../storage/predictions');
 
-    const dateFolder = path.join(baseStorageDir, ist.dateStr);
-    const fileName = `predictions_${ist.dateStr}_${ist.timeStr}.csv`;
-    const filePath = path.join(dateFolder, fileName);
+    const targetHour =
+      windowCheck.targetHour !== undefined
+        ? windowCheck.targetHour
+        : (Math.floor(ist.hour / 4) * 4) % 24;
+    const slotLabel = `${String(targetHour).padStart(2, '0')}-00`;
+
+    const slotDir = path.join(baseStorageDir, ist.dateStr, slotLabel);
+    const rawDir = path.join(slotDir, 'raw');
+    const dateDir = path.join(baseStorageDir, ist.dateStr);
+
+    const uniqueId = Date.now().toString().slice(-4);
+    const fileName = `predictions_${ist.dateStr}_${ist.timeStr}_${uniqueId}.csv`;
+    const rawFilePath = path.join(rawDir, fileName);
+    const compatFilePath = path.join(dateDir, fileName);
     const latestFilePath = path.join(baseStorageDir, 'latest_predictions.csv');
 
-    await fs.promises.mkdir(dateFolder, { recursive: true });
-    await fs.promises.writeFile(filePath, file.buffer);
+    await fs.promises.mkdir(rawDir, { recursive: true });
+    await fs.promises.mkdir(dateDir, { recursive: true });
+
+    await fs.promises.writeFile(rawFilePath, file.buffer);
+    await fs.promises.writeFile(compatFilePath, file.buffer);
     await fs.promises.writeFile(latestFilePath, file.buffer);
 
+    const aggregationTime = `${String(targetHour).padStart(2, '0')}:30 IST`;
+
     console.log(
-      `[AIML Ingest] Successfully stored ${records.length} predictions in ${filePath} (window: ${windowCheck.windowLabel})`
+      `[AIML Ingest] Stored ${records.length} points for slot ${slotLabel} in ${rawFilePath}. Scheduled aggregation: ${aggregationTime}`
     );
 
     return res.status(200).json({
       status: 'ok',
       message: 'Predictions CSV successfully validated and stored',
       receivedRows: records.length,
+      batchSlot: slotLabel,
       scheduledWindow: windowCheck.windowLabel,
+      aggregationScheduledAt: aggregationTime,
       timestamp: ist.formatted,
       storage: {
-        folder: ist.dateStr,
+        slotFolder: `${ist.dateStr}/${slotLabel}/raw`,
         filename: fileName,
-        savedPath: `storage/predictions/${ist.dateStr}/${fileName}`,
+        savedPath: `storage/predictions/${ist.dateStr}/${slotLabel}/raw/${fileName}`,
       },
     });
   } catch (err) {
@@ -255,9 +226,109 @@ async function receivePredictions(req, res) {
   }
 }
 
+/**
+ * POST /api/predictions/aggregate
+ * POST /api/map/aggregate-predictions
+ *
+ * Manually or programmatically triggers 4-hour batch aggregation.
+ * Takes all CSV files for the target slot, averages colliding points,
+ * and produces a single unified final CSV file with unique coordinates.
+ */
+async function triggerManualAggregation(req, res) {
+  try {
+    const providedKey =
+      req.body?.key ||
+      req.headers['x-api-key'] ||
+      (req.headers.authorization && req.headers.authorization.replace(/^Bearer\s+/i, '')) ||
+      req.query?.key;
+
+    const configuredKey = process.env.AIML_API_KEY;
+
+    // Optional key check if configured
+    if (configuredKey && providedKey && providedKey !== configuredKey) {
+      return res.status(401).json({ error: 'Unauthorized: Invalid API key' });
+    }
+
+    const ist = getIstTime();
+    const dateStr = req.body?.date || req.query?.date || ist.dateStr;
+
+    // Default to current/most recent slot if omitted
+    let slotHour = req.body?.slot || req.query?.slot;
+    if (!slotHour) {
+      const targetHour = (Math.floor(ist.hour / 4) * 4) % 24;
+      slotHour = `${String(targetHour).padStart(2, '0')}-00`;
+    }
+
+    const result = await aggregateSlotPredictions({
+      dateStr,
+      slotHour,
+    });
+
+    if (result.status === 'no_files') {
+      return res.status(404).json(result);
+    }
+
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error('triggerManualAggregation error:', err);
+    return res.status(500).json({ error: 'Aggregation failed', details: err.message });
+  }
+}
+
+/**
+ * GET /api/predictions/final
+ * GET /api/map/predictions/final
+ *
+ * Downloads or views the latest unified, aggregated CSV file with unique points and averaged values.
+ */
+async function getLatestFinalCsv(req, res) {
+  try {
+    const baseStorageDir =
+      process.env.PREDICTIONS_STORAGE_DIR ||
+      path.join(__dirname, '../../storage/predictions');
+
+    const finalPath = path.join(baseStorageDir, 'latest_final_predictions.csv');
+    const legacyPath = path.join(baseStorageDir, 'latest_predictions.csv');
+
+    let targetPath = fs.existsSync(finalPath) ? finalPath : legacyPath;
+
+    if (!fs.existsSync(targetPath)) {
+      return res.status(404).json({ error: 'No final predictions CSV available yet' });
+    }
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="final_predictions.csv"'
+    );
+    const readStream = fs.createReadStream(targetPath);
+    readStream.pipe(res);
+  } catch (err) {
+    console.error('getLatestFinalCsv error:', err);
+    res.status(500).json({ error: 'Failed to retrieve final predictions' });
+  }
+}
+
+/**
+ * GET /api/predictions/status
+ *
+ * Returns current scheduler information, upcoming 30m aggregation target, and latest results.
+ */
+function getSchedulerStatusEndpoint(req, res) {
+  try {
+    const status = getSchedulerStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch scheduler status' });
+  }
+}
+
 module.exports = {
   getIstTime,
   checkIstScheduleWindow,
   parseAndValidateCsv,
   receivePredictions,
+  triggerManualAggregation,
+  getLatestFinalCsv,
+  getSchedulerStatusEndpoint,
 };

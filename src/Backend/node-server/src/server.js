@@ -7,6 +7,7 @@ const morgan = require('morgan');
 const mapRoutes = require('./routes/mapRoutes');
 const subscribeRoutes = require('./routes/subscribeRoutes');
 const { getNationalHeatmap } = require('./controllers/mapController');
+const { startPredictionScheduler } = require('./services/predictionScheduler');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -35,4 +36,5 @@ app.use((req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Landslide backend running on http://localhost:${PORT}`);
+  startPredictionScheduler();
 });

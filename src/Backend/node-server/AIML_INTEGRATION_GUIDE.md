@@ -1,6 +1,6 @@
 # AIML Pipeline Integration Guide
 
-This guide details how the Machine Learning pipeline connects to the Node.js backend to push landslide risk predictions.
+This guide details how the Machine Learning pipeline connects to the Node.js backend to push landslide risk predictions, and how the backend aggregates batch predictions.
 
 ## Base URL
 - **Local Development**: `http://localhost:5000`
@@ -39,28 +39,36 @@ Latitude,Longitude,Risk_Rating
 - `Longitude`: Numeric float (-180 to 180)
 - `Risk_Rating`: Numeric float (0 to 1 or risk score)
 
-### Storage:
-Uploaded CSV files are validated and stored in date-partitioned storage:
-- Stored path: `storage/predictions/YYYY-MM-DD/predictions_YYYY-MM-DD_HH-mm-ss.csv`
-- A reference copy is updated at: `storage/predictions/latest_predictions.csv`
+### Storage Organization:
+Uploaded CSV files are organized into nested date and batch-slot folders:
+- Raw path: `storage/predictions/YYYY-MM-DD/HH-00/raw/predictions_YYYY-MM-DD_HH-mm-ss_XXXX.csv`
+- Date folder path: `storage/predictions/YYYY-MM-DD/predictions_YYYY-MM-DD_HH-mm-ss_XXXX.csv`
 
-### Expected Response (200 OK):
-```json
-{
-  "status": "ok",
-  "message": "Predictions CSV successfully validated and stored",
-  "receivedRows": 4600,
-  "scheduledWindow": "20:00 IST",
-  "timestamp": "2026-11-02 20:05:12 IST",
-  "storage": {
-    "folder": "2026-11-02",
-    "filename": "predictions_2026-11-02_20-05-12.csv",
-    "savedPath": "storage/predictions/2026-11-02/predictions_2026-11-02_20-05-12.csv"
-  }
-}
-```
+---
 
-### Error Responses:
-- **401 Unauthorized**: Missing or incorrect API key.
-- **403 Forbidden**: Upload submitted outside the allowed 4-hour window + 15-minute grace period.
-- **400 Bad Request**: Missing file or invalid CSV schema (missing Latitude, Longitude, or Risk_Rating).
+## 2. Automated 30-Minute Post-Fetch Consolidation & Collision Averaging
+
+**30 minutes after each 4-hour fetch window** (at `00:30`, `04:30`, `08:30`, `12:30`, `16:30`, `20:30 IST`), the backend automatically aggregates all uploaded CSV files for that batch into **one single final CSV file**.
+
+### Collision Averaging Rule:
+- Multiple CSV files may contain **overlapping coordinates** (identical `Latitude` and `Longitude`).
+- When coordinates collide, the backend computes the arithmetic average:
+  $$\text{Risk\_Rating} = \frac{\sum \text{Risk\_Rating}}{\text{Count}}$$
+- The final consolidated file contains **strictly unique coordinates** with their calculated average risk ratings.
+
+### Output Files:
+1. Slot-level: `storage/predictions/YYYY-MM-DD/HH-00/final_predictions.csv`
+2. Date-level: `storage/predictions/YYYY-MM-DD/final_predictions_HH-00.csv`
+3. Latest unified file: `storage/predictions/latest_predictions.csv` and `storage/predictions/latest_final_predictions.csv`
+4. Metadata summary: `storage/predictions/YYYY-MM-DD/HH-00/aggregation_meta.json`
+
+---
+
+## 3. Endpoints & Operations
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/api/map/predictions` | API Key | Ingests predictions CSV during the 4-hour schedule window. |
+| `POST` | `/api/map/aggregate` | API Key / Public | Manually triggers aggregation for a slot (optional `date`, `slot`). |
+| `GET` | `/api/map/final` | None | Downloads/streams the latest consolidated `final_predictions.csv`. |
+| `GET` | `/api/map/status` | None | Returns scheduler state, upcoming aggregation time, and last execution details. |

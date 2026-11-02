@@ -2,7 +2,12 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 
-const { receivePredictions } = require('../controllers/predictionController');
+const {
+  receivePredictions,
+  triggerManualAggregation,
+  getLatestFinalCsv,
+  getSchedulerStatusEndpoint,
+} = require('../controllers/predictionController');
 const {
   getNationalHeatmap,
   getTopRiskDistricts,
@@ -25,5 +30,12 @@ router.get('/district/:id', getDistrictDetail);
 // AIML Predictions Upload — receives 3-column CSV on IST schedule
 router.post('/national', upload.any(), receivePredictions);
 router.post('/predictions', upload.any(), receivePredictions);
+
+// Aggregation operations & final output
+router.post('/aggregate', triggerManualAggregation);
+router.post('/aggregate-predictions', triggerManualAggregation);
+router.get('/final', getLatestFinalCsv);
+router.get('/final-predictions', getLatestFinalCsv);
+router.get('/status', getSchedulerStatusEndpoint);
 
 module.exports = router;
