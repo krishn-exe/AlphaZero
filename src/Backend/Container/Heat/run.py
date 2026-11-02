@@ -39,6 +39,7 @@ LIVEDATA_DIR = CONTAINER_DIR / "LiveData"
 ML_MODEL_DIR = SCRIPT_DIR / "ML-model"
 
 sys.path.insert(0, str(LIVEDATA_DIR))
+from time_utils import get_current_ist_time
 
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger("run")
@@ -250,9 +251,9 @@ def run_cycle(config: dict, model, *, fresh: bool = False):
 # ==============================================================================
 
 
-def get_next_ist_window(interval_hours: int = 4) -> datetime:
-    """Return the next IST-aligned window."""
-    now = datetime.now(IST)
+def get_next_ist_window(interval_hours: int = 4, reference_time: datetime = None) -> datetime:
+    """Return the next IST-aligned window based on verified IST time."""
+    now = reference_time or get_current_ist_time()
     current_hour = now.hour
     next_hour = ((current_hour // interval_hours) + 1) * interval_hours
 
@@ -263,20 +264,33 @@ def get_next_ist_window(interval_hours: int = 4) -> datetime:
         return now.replace(hour=next_hour, minute=0, second=0, microsecond=0)
 
 
+def is_on_scheduled_window(interval_hours: int = 4, tolerance_minutes: int = 2, reference_time: datetime = None) -> bool:
+    """Check if verified IST time is right at a scheduled interval window (e.g. 00:00, 04:00, etc.)."""
+    now = reference_time or get_current_ist_time()
+    return (now.hour % interval_hours == 0) and (now.minute < tolerance_minutes)
+
+
 def daemon_loop(config: dict, model):
     """Run cycles on the IST 4h schedule."""
     interval = config["schedule"]["interval_hours"]
     logger.info(f"Daemon mode started — IST {interval}h windows")
-    logger.info("Running initial cycle ...")
 
-    try:
-        run_cycle(config, model)
-    except Exception:
-        logger.exception("Initial cycle failed")
+    current_ist = get_current_ist_time()
+    logger.info(f"Verified current IST time: {current_ist.strftime('%Y-%m-%d %H:%M:%S IST')}")
+
+    if is_on_scheduled_window(interval, reference_time=current_ist):
+        logger.info("Daemon started at scheduled window. Running initial cycle ...")
+        try:
+            run_cycle(config, model)
+        except Exception:
+            logger.exception("Initial cycle failed")
+    else:
+        logger.info("Daemon started outside scheduled window. Waiting until next scheduled window ...")
 
     while True:
-        next_win = get_next_ist_window(interval)
-        sleep_sec = max(0, (next_win - datetime.now(IST)).total_seconds())
+        verified_ist = get_current_ist_time()
+        next_win = get_next_ist_window(interval, reference_time=verified_ist)
+        sleep_sec = max(0, (next_win - verified_ist).total_seconds())
 
         logger.info(
             f"Next run: {next_win.strftime('%Y-%m-%d %H:%M IST')} "

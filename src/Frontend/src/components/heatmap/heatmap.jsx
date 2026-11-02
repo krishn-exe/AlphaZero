@@ -151,7 +151,7 @@ function Heatmap() {
 
   const API_URL =
     import.meta.env.VITE_API_URL ||
-    "https://land-slide-sih26.onrender.com";
+    (''.replace(/\/+$/, '')); // Empty default resolves to current host
 
 
   /* =====================================================
@@ -173,7 +173,7 @@ function Heatmap() {
 
 
         const response = await fetch(
-          `${API_URL}/data/national`,
+          `${API_URL}/api/map/national`,
           {
             signal: controller.signal,
           }

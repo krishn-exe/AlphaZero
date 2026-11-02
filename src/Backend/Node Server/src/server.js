@@ -12,16 +12,20 @@ const adminAuthRoutes = require('./routes/adminAuthRoutes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(helmet());
-app.use(cors()); // wide open for now — restrict to your frontend's origin before demo/prod
+app.use(helmet({
+  contentSecurityPolicy: false,
+}));
+app.use(cors());
 app.use(morgan('dev'));
 app.use(express.json());
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-const { getGridPredictions } = require('./controllers/mapController');
+const { getGridPredictions, getNationalHeatmap } = require('./controllers/mapController');
 
 app.get('/api/risk-data', getGridPredictions);
+app.get('/data/national', getNationalHeatmap);
+app.get('/api/data/national', getNationalHeatmap);
 app.use('/api/map', mapRoutes);
 app.use('/api/incidents', incidentRoutes);
 app.use('/api/subscribe', subscribeRoutes);

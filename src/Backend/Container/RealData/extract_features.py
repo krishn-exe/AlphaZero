@@ -18,9 +18,11 @@ Output:
   `RealData/India_Landslides_with_features.csv`
 """
 
+import argparse
 import logging
 import math
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -66,13 +68,23 @@ logger = logging.getLogger("historical_pipeline")
 # ==============================================================================
 
 def load_and_clean_landslides(csv_path: Path) -> pd.DataFrame:
-    """Load India_Landslides.csv, clean coordinates and parse dates."""
-    logger.info(f"Loading input landslide records from {csv_path.name}...")
+    """Load input CSV records (landslides or negative points), clean coordinates and parse dates."""
+    logger.info(f"Loading input records from {csv_path.name}...")
     df = pd.read_csv(csv_path)
 
+    # Normalize column names for lat/lon
+    lat_col = next((c for c in ["latitude", "Latitude", "lat", "Lat"] if c in df.columns), None)
+    lon_col = next((c for c in ["longitude", "Longitude", "lon", "Lon", "lng", "Lng"] if c in df.columns), None)
+    date_col = next((c for c in ["event_date", "Date", "date", "Event_Date"] if c in df.columns), None)
+    time_col = next((c for c in ["event_time", "Time", "time", "Event_Time"] if c in df.columns), None)
+
+    if not lat_col or not lon_col:
+        raise ValueError(f"Could not find latitude/longitude columns in {csv_path}")
+
     # Clean latitude and longitude (remove trailing characters like '15.4014a')
-    df["latitude"] = df["latitude"].astype(str).str.replace(r"[^0-9.-]", "", regex=True)
+    df["latitude"] = df[lat_col].astype(str).str.replace(r"[^0-9.-]", "", regex=True)
     df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
+    df["longitude"] = df[lon_col].astype(str).str.replace(r"[^0-9.-]", "", regex=True)
     df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
 
     # Standardize column names to match pipeline conventions
@@ -80,8 +92,11 @@ def load_and_clean_landslides(csv_path: Path) -> pd.DataFrame:
     df["Longitude"] = df["longitude"]
 
     # Parse date and time
-    df["parsed_date"] = pd.to_datetime(df["event_date"], errors="coerce")
-    df["parsed_time"] = df["event_time"].astype(str).str.strip()
+    df["parsed_date"] = pd.to_datetime(df[date_col], errors="coerce") if date_col else pd.Timestamp.now()
+    if time_col and time_col in df.columns:
+        df["parsed_time"] = df[time_col].astype(str).str.strip().replace("nan", "0:00")
+    else:
+        df["parsed_time"] = "0:00"
 
     # Form formatted Fetch_Timestamp
     df["Fetch_Timestamp"] = (
@@ -91,7 +106,7 @@ def load_and_clean_landslides(csv_path: Path) -> pd.DataFrame:
     # Drop any records with unparseable coordinates or dates
     valid_mask = df["Latitude"].notna() & df["Longitude"].notna() & df["parsed_date"].notna()
     cleaned = df[valid_mask].reset_index(drop=True)
-    logger.info(f"Loaded {len(cleaned)} valid landslide records (dropped {len(df) - len(cleaned)} invalid).")
+    logger.info(f"Loaded {len(cleaned)} valid records (dropped {len(df) - len(cleaned)} invalid).")
     return cleaned
 
 
@@ -190,7 +205,9 @@ def compute_historical_earthquake_activity(
 # 3. GEE Historical Periodic & Realtime Features (MODIS, CHIRPS, ERA5-Land)
 # ==============================================================================
 
-def sample_historical_gee_features(df: pd.DataFrame, batch_size: int = 50) -> pd.DataFrame:
+def sample_historical_gee_features(
+    df: pd.DataFrame, batch_size: int = 50, checkpoint_path: Path | None = None
+) -> pd.DataFrame:
     """
     Extract NDVI, rainfall (24h/3d), soil moisture/saturation, temperature,
     humidity, and soil temperature for each point's specific date using
@@ -208,6 +225,17 @@ def sample_historical_gee_features(df: pd.DataFrame, batch_size: int = 50) -> pd
     res_df["Soil_Temperature_C"] = 22.0
     res_df["Temperature_C"] = 24.0
     res_df["Humidity_percent"] = 75.0
+
+    completed_indices = set()
+    if checkpoint_path and checkpoint_path.exists():
+        try:
+            ckpt_df = pd.read_csv(checkpoint_path, index_col=0)
+            common_cols = [c for c in res_df.columns if c in ckpt_df.columns]
+            res_df.loc[ckpt_df.index, common_cols] = ckpt_df[common_cols]
+            completed_indices = set(ckpt_df.index)
+            logger.info(f"Loaded {len(completed_indices)} sampled rows from checkpoint: {checkpoint_path.name}")
+        except Exception as exc:
+            logger.warning(f"Failed to load checkpoint ({exc}), starting fresh.")
 
     chirps = ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY").select("precipitation")
     modis = ee.ImageCollection("MODIS/061/MOD13Q1").select("NDVI")
@@ -247,6 +275,11 @@ def sample_historical_gee_features(df: pd.DataFrame, batch_size: int = 50) -> pd
     for start_idx in range(0, total_points, batch_size):
         end_idx = min(start_idx + batch_size, total_points)
         batch_slice = df.iloc[start_idx:end_idx]
+
+        # Check if entire batch is already completed in checkpoint
+        if completed_indices and all(idx in completed_indices for idx in batch_slice.index):
+            continue
+
         logger.info(f"Processing GEE batch {start_idx+1}-{end_idx} / {total_points}...")
 
         feats = []
@@ -260,10 +293,20 @@ def sample_historical_gee_features(df: pd.DataFrame, batch_size: int = 50) -> pd
             )
             feats.append(f)
 
-        try:
-            fc = ee.FeatureCollection(feats)
-            sampled = fc.map(sample_all_dynamic).getInfo()
+        sampled = None
+        for attempt in range(1, 4):
+            try:
+                fc = ee.FeatureCollection(feats)
+                sampled = fc.map(sample_all_dynamic).getInfo()
+                break
+            except Exception as exc:
+                if attempt < 3:
+                    logger.warning(f"Batch {start_idx+1}-{end_idx} attempt {attempt} failed: {exc}. Retrying in {attempt * 2}s...")
+                    time.sleep(attempt * 2)
+                else:
+                    logger.warning(f"Batch {start_idx+1}-{end_idx} error after 3 attempts ({exc}) -- using ambient fallbacks.")
 
+        if sampled:
             for item in sampled.get("features", []):
                 props = item.get("properties", {})
                 idx = props.get("idx")
@@ -312,8 +355,9 @@ def sample_historical_gee_features(df: pd.DataFrame, batch_size: int = 50) -> pd
                 if st is not None:
                     res_df.loc[idx, "Soil_Temperature_C"] = round(float(st) - 273.15, 2)
 
-        except Exception as exc:
-            logger.warning(f"Batch {start_idx+1}-{end_idx} error ({exc}) -- using ambient fallbacks.")
+        # Checkpoint progress after each batch
+        if checkpoint_path:
+            res_df.iloc[:end_idx].to_csv(checkpoint_path)
 
     return res_df
 
@@ -323,12 +367,69 @@ def sample_historical_gee_features(df: pd.DataFrame, batch_size: int = 50) -> pd
 # ==============================================================================
 
 def main():
-    input_file = SCRIPT_DIR / "India_Landslides.csv"
-    output_file = SCRIPT_DIR / "India_Landslides_with_features.csv"
+    parser = argparse.ArgumentParser(
+        description="Historical Landslide & Pseudo-Absence Feature Extraction Pipeline"
+    )
+    parser.add_argument(
+        "--input", "-i",
+        type=str,
+        default=str(SCRIPT_DIR / "negative_pts.csv"),
+        help="Input CSV path (default: RealData/negative_pts.csv)",
+    )
+    parser.add_argument(
+        "--output", "-o",
+        type=str,
+        default=None,
+        help="Output CSV path (default: <input_stem>_with_features.csv)",
+    )
+    parser.add_argument(
+        "--label", "-l",
+        type=int,
+        default=None,
+        help="Label value to assign (default: 0 for negative points, 1 for positive landslides)",
+    )
+    parser.add_argument(
+        "--batch-size", "-b",
+        type=int,
+        default=50,
+        help="GEE batch size (default: 50)",
+    )
+    args = parser.parse_args()
 
+    input_file = Path(args.input)
     if not input_file.exists():
-        logger.error(f"Input file not found: {input_file}")
-        sys.exit(1)
+        if (SCRIPT_DIR / input_file).exists():
+            input_file = SCRIPT_DIR / input_file
+        elif (CONTAINER_DIR / input_file).exists():
+            input_file = CONTAINER_DIR / input_file
+        else:
+            logger.error(f"Input file not found: {args.input}")
+            sys.exit(1)
+    input_file = input_file.resolve()
+
+    if args.output:
+        output_file = Path(args.output)
+        if not output_file.is_absolute():
+            output_file = (CONTAINER_DIR / output_file).resolve()
+    else:
+        output_file = input_file.parent / f"{input_file.stem}_with_features.csv"
+
+    if args.label is not None:
+        target_label = args.label
+    elif "negative" in input_file.stem.lower():
+        target_label = 0
+    else:
+        target_label = 1
+
+    checkpoint_file = input_file.parent / f".checkpoint_dynamic_{input_file.stem}.csv"
+
+    logger.info("=" * 65)
+    logger.info("Historical Feature Extraction Pipeline")
+    logger.info(f"Input file   : {input_file.resolve()}")
+    logger.info(f"Output file  : {output_file.resolve()}")
+    logger.info(f"Target Label : {target_label}")
+    logger.info(f"Batch Size   : {args.batch_size}")
+    logger.info("=" * 65)
 
     # 1. Clean input
     df = load_and_clean_landslides(input_file)
@@ -371,7 +472,7 @@ def main():
     eq_activity = compute_historical_earthquake_activity(df, earthquakes)
 
     # 6. Tier 2 & Tier 3: Date-specific NDVI, Rainfall, Weather, Soil
-    dyn_df = sample_historical_gee_features(df)
+    dyn_df = sample_historical_gee_features(df, batch_size=args.batch_size, checkpoint_path=checkpoint_file)
 
     # ==========================================================================
     # Merge All Features
@@ -379,10 +480,16 @@ def main():
     logger.info("Merging all features into final training schema...")
     output = df[["Latitude", "Longitude", "Fetch_Timestamp"]].copy()
 
-    # Static features merge
-    for col in static_df.columns:
-        if col not in ["Latitude", "Longitude", "grid_idx"]:
-            output[col] = static_df[col].values
+    # Static features merge aligned by grid_idx
+    if "grid_idx" in static_df.columns:
+        s_indexed = static_df.set_index("grid_idx")
+        for col in s_indexed.columns:
+            if col not in ["Latitude", "Longitude"]:
+                output[col] = s_indexed[col].reindex(output.index).values
+    else:
+        for col in static_df.columns:
+            if col not in ["Latitude", "Longitude"]:
+                output[col] = static_df[col].values
 
     # Add external static features
     output["Distance_to_Road_m"] = road_distances.values
@@ -393,7 +500,7 @@ def main():
 
     # Add dynamic date features
     for col in dyn_df.columns:
-        output[col] = dyn_df[col].values
+        output[col] = dyn_df[col].reindex(output.index).values
 
     # Compute Soil Erosion Rate (RUSLE model)
     output["Soil_Erosion_Rate"] = compute_soil_erosion_rate(output).values
@@ -404,13 +511,19 @@ def main():
             output[col] = 0.0
     output = output[OUTPUT_COLUMNS]
 
-    # Add requested Label column (= 1 for all real historical landslides)
-    output["Label"] = 1
+    # Add requested Label column
+    output["Label"] = target_label
 
     # Save final CSV
     output.to_csv(output_file, index=False)
+    if checkpoint_file.exists():
+        try:
+            checkpoint_file.unlink()
+        except Exception:
+            pass
+
     logger.info("=" * 65)
-    logger.info(f"SUCCESS: Generated features for {len(output)} historical landslide events!")
+    logger.info(f"SUCCESS: Generated features for {len(output)} records with Label={target_label}!")
     logger.info(f"Saved to: {output_file.resolve()}")
     logger.info(f"Columns ({len(output.columns)}): {list(output.columns)}")
     logger.info("=" * 65)
