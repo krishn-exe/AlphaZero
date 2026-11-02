@@ -39,7 +39,9 @@ LIVEDATA_DIR = CONTAINER_DIR / "LiveData"
 ML_MODEL_DIR = SCRIPT_DIR / "ML-model"
 
 sys.path.insert(0, str(LIVEDATA_DIR))
+sys.path.insert(0, str(ML_MODEL_DIR))
 from time_utils import get_current_ist_time
+from landslide_predict import build_features, predict as v2_predict
 
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger("run")
@@ -87,17 +89,26 @@ def run_data_pipeline(config: dict, *, fresh: bool = False) -> pd.DataFrame:
 # Phase 2: ML Prediction
 # ==============================================================================
 
-# Load model once at module level for reuse across daemon cycles
-MODEL_PATH = ML_MODEL_DIR / "landslide_model.pkl"
+# Model artifact paths (Model v2 calibrated artifact prioritized over legacy)
+MODEL_V2_PATH = ML_MODEL_DIR / "landslide_model_v2.pkl"
+MODEL_LEGACY_PATH = ML_MODEL_DIR / "landslide_model.pkl"
+MODEL_PATH = MODEL_V2_PATH if MODEL_V2_PATH.exists() else MODEL_LEGACY_PATH
 
 
-def load_model():
-    """Load the pre-trained XGBoost model from disk."""
-    if not MODEL_PATH.exists():
-        logger.error(f"Model file not found: {MODEL_PATH}")
+def load_model(model_path: Path | None = None):
+    """Load the pre-trained ML model artifact from disk."""
+    target_path = Path(model_path) if model_path else MODEL_PATH
+    if not target_path.exists():
+        logger.error(f"Model file not found: {target_path}")
         sys.exit(1)
-    model = joblib.load(MODEL_PATH)
-    logger.info(f"ML model loaded: {MODEL_PATH.name}")
+    model = joblib.load(target_path)
+    if isinstance(model, dict):
+        logger.info(
+            f"Calibrated ML model artifact loaded: {target_path.name} "
+            f"({len(model.get('features', []))} features, threshold={model.get('threshold', 0.5):.4f})"
+        )
+    else:
+        logger.info(f"Legacy ML model loaded: {target_path.name}")
     return model
 
 
@@ -106,25 +117,35 @@ def run_prediction(model, output_csv: Path) -> pd.DataFrame:
     Run the ML model on the pipeline output.
 
     Returns a DataFrame with Latitude, Longitude, and Risk_Rating (clamped 0-1).
-    Also saves the full prediction output to Heat/ML-model/predicted_risk_output.csv.
+    Also saves the prediction output to Heat/ML-model/predicted_risk_output.csv.
     """
     df = pd.read_csv(output_csv)
     logger.info(f"Prediction input: {len(df)} rows from {output_csv.name}")
 
-    # Drop metadata columns -- the model was trained without them
-    feature_df = df.drop(columns=["Latitude", "Longitude", "Fetch_Timestamp"], errors="ignore")
+    if isinstance(model, dict):
+        # Model v2: Calibrated continuous probabilistic model artifact with Platt scaling
+        res = v2_predict(df, model)
+        risk_ratings = res["landslide_score"].values
+        df["Risk_Rating"] = risk_ratings
+        df["landslide_score"] = risk_ratings
+        if "risk_level" in res.columns:
+            df["risk_level"] = res["risk_level"].values
+        if "landslide_predicted" in res.columns:
+            df["landslide_predicted"] = res["landslide_predicted"].values
+        logger.info(
+            f"V2 inference complete: {len(df)} rows evaluated | "
+            f"Risk_Rating mean={risk_ratings.mean():.4f}, min={risk_ratings.min():.4f}, max={risk_ratings.max():.4f}"
+        )
+    else:
+        # Legacy fallback: raw XGBoost classifier
+        feature_df = df.drop(columns=["Latitude", "Longitude", "Fetch_Timestamp"], errors="ignore")
+        expected_order = model.get_booster().feature_names
+        feature_df = feature_df[expected_order]
+        logger.info(f"Features reordered to match legacy model ({len(expected_order)} features)")
+        risk_ratings = model.predict_proba(feature_df)[:, 1].round(4)
+        df["Risk_Rating"] = risk_ratings
 
-    # Reorder columns to match the model's training feature order
-    expected_order = model.get_booster().feature_names
-    feature_df = feature_df[expected_order]
-    logger.info(f"Features reordered to match model ({len(expected_order)} features)")
-
-    # Predict probabilities (class 1 = landslide risk)
-    risk_ratings = model.predict_proba(feature_df)[:, 1].round(4)
-
-    df["Risk_Rating"] = risk_ratings
-
-    # Save prediction output (only key columns)
+    # Save prediction output (standard schema: Latitude, Longitude, Risk_Rating)
     pred_output = ML_MODEL_DIR / "predicted_risk_output.csv"
     df[["Latitude", "Longitude", "Risk_Rating"]].to_csv(pred_output, index=False)
     logger.info(f"Predictions saved: {pred_output.name} ({len(df)} rows)")

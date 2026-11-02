@@ -17,7 +17,8 @@ df = df.drop(
         'Rainfall_7Day', 'Soil_Type_Gravel', 'Soil_Type_Sand', 'Soil_Type_Silt',
         'Soil_Type_Clay', 'Pore_Water_Pressure_kPa', 'Microseismic_Activity',
         'Acoustic_Emission_dB', 'Soil_Strain', 
-        'TDR_Reflection_Index']
+        'TDR_Reflection_Index'],
+    errors='ignore'
 )
 
 print(list(df.columns))
