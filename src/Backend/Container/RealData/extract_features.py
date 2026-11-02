@@ -2,8 +2,9 @@
 """
 Historical Landslide Feature Extraction Pipeline
 =================================================
-Processes `RealData/India_Landslides.csv` to extract the 24 geospatial features
-corresponding to each event's specific location and historical date.
+Processes an input CSV (landslide events or negative / pseudo-absence points)
+to extract the 24 geospatial features corresponding to each event's specific
+location and historical date.
 
 Imports existing logic from LiveData modules:
   - GEE Static Tier (SRTM DEM, SoilGrids, ESA WorldCover)
@@ -12,10 +13,12 @@ Imports existing logic from LiveData modules:
   - ERA5-Land historical soil moisture, temperature, and humidity
   - USGS historical earthquake activity (90-day window per event)
   - RUSLE soil erosion model & historical landslide counts
-  - Appends `Label = 1` for all rows
+  - Appends requested or inferred `Label` column
 
-Output:
-  `RealData/India_Landslides_with_features.csv`
+Usage:
+  python extract_features.py --input <path_to_csv> --output-label <0 or 1>
+  python extract_features.py --csv <path_to_csv> --label <0 or 1>
+  python extract_features.py <path_to_csv> --output-label 0
 """
 
 import argparse
@@ -73,10 +76,10 @@ def load_and_clean_landslides(csv_path: Path) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
 
     # Normalize column names for lat/lon
-    lat_col = next((c for c in ["latitude", "Latitude", "lat", "Lat"] if c in df.columns), None)
-    lon_col = next((c for c in ["longitude", "Longitude", "lon", "Lon", "lng", "Lng"] if c in df.columns), None)
-    date_col = next((c for c in ["event_date", "Date", "date", "Event_Date"] if c in df.columns), None)
-    time_col = next((c for c in ["event_time", "Time", "time", "Event_Time"] if c in df.columns), None)
+    lat_col = next((c for c in ["latitude", "Latitude", "lat", "Lat", "LATITUDE"] if c in df.columns), None)
+    lon_col = next((c for c in ["longitude", "Longitude", "lon", "Lon", "lng", "Lng", "LONGITUDE"] if c in df.columns), None)
+    date_col = next((c for c in ["event_date", "Date", "date", "Event_Date", "datetime", "DateTime", "timestamp", "Timestamp", "dt"] if c in df.columns), None)
+    time_col = next((c for c in ["event_time", "Time", "time", "Event_Time", "tm"] if c in df.columns), None)
 
     if not lat_col or not lon_col:
         raise ValueError(f"Could not find latitude/longitude columns in {csv_path}")
@@ -366,27 +369,47 @@ def sample_historical_gee_features(
 # Main Orchestrator
 # ==============================================================================
 
+def parse_label(val: str):
+    """Parse label value to int, float, or string."""
+    try:
+        f = float(val)
+        if f.is_integer():
+            return int(f)
+        return f
+    except ValueError:
+        return val
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Historical Landslide & Pseudo-Absence Feature Extraction Pipeline"
     )
     parser.add_argument(
-        "--input", "-i",
-        type=str,
-        default=str(SCRIPT_DIR / "negative_pts.csv"),
-        help="Input CSV path (default: RealData/negative_pts.csv)",
+        "csv_file",
+        nargs="?",
+        default=None,
+        help="Optional positional path to input CSV file (e.g. RealData/nega_pts_3000_15000m_cleaned.csv)",
     )
     parser.add_argument(
-        "--output", "-o",
+        "--input", "-i", "--csv", "--file", "-f",
+        dest="input",
         type=str,
         default=None,
-        help="Output CSV path (default: <input_stem>_with_features.csv)",
+        help="Input CSV path (default: RealData/negative_pts.csv or RealData/India_Landslides.csv)",
     )
     parser.add_argument(
-        "--label", "-l",
-        type=int,
+        "--output", "-o", "--output-file",
+        dest="output",
+        type=str,
         default=None,
-        help="Label value to assign (default: 0 for negative points, 1 for positive landslides)",
+        help="Output CSV path (default: <input_stem>_with_features.csv in the same directory as input)",
+    )
+    parser.add_argument(
+        "--label", "-l", "--output-label", "--output_label",
+        dest="label",
+        type=parse_label,
+        default=None,
+        help="Output label value to assign (e.g., 0 for negative points, 1 for positive landslides)",
     )
     parser.add_argument(
         "--batch-size", "-b",
@@ -396,43 +419,72 @@ def main():
     )
     args = parser.parse_args()
 
-    input_file = Path(args.input)
-    if not input_file.exists():
-        if (SCRIPT_DIR / input_file).exists():
-            input_file = SCRIPT_DIR / input_file
-        elif (CONTAINER_DIR / input_file).exists():
-            input_file = CONTAINER_DIR / input_file
-        else:
-            logger.error(f"Input file not found: {args.input}")
-            sys.exit(1)
-    input_file = input_file.resolve()
+    raw_input = args.csv_file or args.input
+    if raw_input is None:
+        default_candidate = SCRIPT_DIR / "negative_pts.csv"
+        if not default_candidate.exists():
+            default_candidate = SCRIPT_DIR / "India_Landslides.csv"
+        raw_input = str(default_candidate)
+
+    input_path = Path(raw_input)
+    if input_path.exists():
+        input_file = input_path.resolve()
+    elif (Path.cwd() / input_path).exists():
+        input_file = (Path.cwd() / input_path).resolve()
+    elif (SCRIPT_DIR / input_path).exists():
+        input_file = (SCRIPT_DIR / input_path).resolve()
+    elif (CONTAINER_DIR / input_path).exists():
+        input_file = (CONTAINER_DIR / input_path).resolve()
+    else:
+        logger.error(
+            f"Input file not found: {raw_input}\n"
+            f"Searched paths:\n"
+            f"  - {input_path.resolve()}\n"
+            f"  - {(Path.cwd() / input_path).resolve()}\n"
+            f"  - {(SCRIPT_DIR / input_path).resolve()}\n"
+            f"  - {(CONTAINER_DIR / input_path).resolve()}"
+        )
+        sys.exit(1)
 
     if args.output:
         output_file = Path(args.output)
         if not output_file.is_absolute():
-            output_file = (CONTAINER_DIR / output_file).resolve()
+            output_file = (Path.cwd() / output_file).resolve()
+        else:
+            output_file = output_file.resolve()
     else:
         output_file = input_file.parent / f"{input_file.stem}_with_features.csv"
 
+    checkpoint_file = input_file.parent / f".checkpoint_dynamic_{input_file.stem}.csv"
+
+    # 1. Clean input
+    df = load_and_clean_landslides(input_file)
+
+    # Determine target label
     if args.label is not None:
         target_label = args.label
-    elif "negative" in input_file.stem.lower():
+    elif "label" in df.columns:
+        target_label = df["label"].values
+    elif "Label" in df.columns:
+        target_label = df["Label"].values
+    elif any(kw in input_file.stem.lower() for kw in ["negative", "nega", "absence", "non_landslide"]):
         target_label = 0
     else:
         target_label = 1
 
-    checkpoint_file = input_file.parent / f".checkpoint_dynamic_{input_file.stem}.csv"
+    label_desc = (
+        str(target_label)
+        if isinstance(target_label, (int, float, str))
+        else f"Extracted from input CSV ({len(df)} records)"
+    )
 
     logger.info("=" * 65)
     logger.info("Historical Feature Extraction Pipeline")
-    logger.info(f"Input file   : {input_file.resolve()}")
-    logger.info(f"Output file  : {output_file.resolve()}")
-    logger.info(f"Target Label : {target_label}")
+    logger.info(f"Input file   : {input_file}")
+    logger.info(f"Output file  : {output_file}")
+    logger.info(f"Target Label : {label_desc}")
     logger.info(f"Batch Size   : {args.batch_size}")
     logger.info("=" * 65)
-
-    # 1. Clean input
-    df = load_and_clean_landslides(input_file)
 
     # 2. Init Earth Engine
     config = load_config()
@@ -523,8 +575,8 @@ def main():
             pass
 
     logger.info("=" * 65)
-    logger.info(f"SUCCESS: Generated features for {len(output)} records with Label={target_label}!")
-    logger.info(f"Saved to: {output_file.resolve()}")
+    logger.info(f"SUCCESS: Generated features for {len(output)} records with Label={label_desc}!")
+    logger.info(f"Saved to: {output_file}")
     logger.info(f"Columns ({len(output.columns)}): {list(output.columns)}")
     logger.info("=" * 65)
 
