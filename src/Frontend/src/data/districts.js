@@ -1,7 +1,5 @@
-// PLACEHOLDER DATA — replace with the full ~130-district list from backend.
 // Grouped by state so it can render as <optgroup> in dropdowns.
-// Shared across ReportIncident, SubscribeAlert, and the feed's district search
-// so there's a single source of truth for district names.
+// Used by SubscribeAlert and map views as single source of truth for district names.
 
 export const NER_DISTRICTS = [
   {
@@ -73,5 +71,5 @@ export const NER_DISTRICTS = [
   },
 ];
 
-// Flat list, useful for the feed's search/filter logic
+// Flat list of all NER districts
 export const NER_DISTRICTS_FLAT = NER_DISTRICTS.flatMap((s) => s.districts);

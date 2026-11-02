@@ -1,10 +1,9 @@
 {
   "nav": {
     "home": "Home",
-    "reportIncident": "Report Incident",
     "alerts": "Alerts",
     "about": "About",
-    "adminLogin": "Admin login"
+    "map": "Risk Heatmap"
   },
   "footer": {
     "tagline": "AI-Based Early Warning & Landslide Risk Monitoring System for Northeast India",
@@ -12,8 +11,7 @@
     "emergencyContacts": "Emergency Contacts",
     "emergencyNote": "In case of emergency, contact local authorities immediately. This platform is a monitoring aid, not a replacement for official emergency services.",
     "credits": "Credits",
-    "disclaimer": "Landslide risk predictions are indicative, based on available data, and should not be the sole basis for evacuation decisions.",
-    "authorityDashboard": "Authority Dashboard"
+    "disclaimer": "Landslide risk predictions are indicative, based on available data, and should not be the sole basis for evacuation decisions."
   },
   "subscribe": {
     "title": "Get Landslide Alerts",
@@ -46,9 +44,7 @@
     "step2Title": "AI predicts risk in realtime",
     "step2Text": "Our model scores landslide risk (low/moderate/high) and updates the heatmap live",
     "step3Title": "You get alerted before it happens",
-    "step3Text": "If your area crosses into high risk, you get an instant SMS/email warning — not after the fact.",
-    "step4Title": "You can report what you see",
-    "step4Text": "Spot a landslide, blocked road, or hazard? Report it in seconds to help authorities respond faster."
+    "step3Text": "If your area crosses into high risk, you get an instant SMS/email warning — not after the fact."
   },
   "infoMax": {
     "monitoredLocations": "Monitored Location",
@@ -56,57 +52,7 @@
     "continuousMonitoring": "Continuous Monitoring",
     "predictionAccuracy": "Prediction Accuracy"
   },
-  "reportCta": {
-    "badge": "CITIZEN REPORTING",
-    "title": "Help Protect Your Community",
-    "description": "Spotted a hazard? Your reports help our AI and authorities respond faster to landslides, road damage, and flooding.",
-    "button": "REPORT AN INCIDENT"
-  },
-  "reportPage": {
-    "title": "Report an Incident",
-    "subtitle": "Help us monitor landslide risks and road blockages by reporting incidents in your area.",
-    "categoryLabel": "Incident Category *",
-    "districtLabel": "District",
-    "districtPlaceholder": "Select your district",
-    "categories": {
-      "road_blockage": "Road Blockage",
-      "landslide": "Landslide",
-      "flooding": "Flooding",
-      "structural_damage": "Structural Damage",
-      "other": "Other"
-    },
-    "photoLabel": "Photo (optional)",
-    "uploadPrompt": "Tap to add a photo",
-    "photoErrorType": "Please upload an image file.",
-    "photoErrorSize": "Image must be under 5MB.",
-    "descriptionLabel": "Description *",
-    "descriptionPlaceholder": "E.g., Tree fell across the highway near mile marker 4...",
-    "latitudeLabel": "Latitude *",
-    "longitudeLabel": "Longitude *",
-    "useCurrentLocation": "Use my current location",
-    "geoError": "Could not retrieve your location automatically. Please enter it manually.",
-    "geoNotSupported": "Geolocation is not supported by this browser.",
-    "submitBtn": "Submit Report",
-    "submitting": "Submitting...",
-    "successMsg": "Your incident report has been submitted successfully. Authorities have been notified.",
-    "errorRequired": "Please fill in all required fields.",
-    "errorGeneric": "An error occurred while submitting the report. Please try again."
-  },
-  "feedPage": {
-    "title": "Verified Reports",
-    "subtitle": "Incidents verified by authorities, searchable by district.",
-    "filterLabel": "Filter by district",
-    "allDistricts": "All districts",
-    "loading": "Loading reports...",
-    "errorGeneric": "Couldn't load reports. Please try again.",
-    "empty": "No verified reports found for this district yet.",
-    "verified": "Verified",
-    "viewReport": "View Report",
-    "noPhoto": "No photo attached"
-  },
-  "home": {
-    "viewFeed": "View Incident Feed"
-  },
+  "home": {},
   "heatmap": {
     "liveMonitoring": "LIVE MONITORING",
     "title": "Landslide Risk Heatmap",

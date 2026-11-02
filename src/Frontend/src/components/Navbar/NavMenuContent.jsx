@@ -1,9 +1,7 @@
 import LanguageSelect from './LanguageSelect';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 function NavMenuContent({ navItems, activeSection, scrollToSection }) {
-  const navigate = useNavigate();
   const { t } = useTranslation();
 
   return (
@@ -22,12 +20,12 @@ function NavMenuContent({ navItems, activeSection, scrollToSection }) {
       </ul>
 
       <LanguageSelect />
-      <button className="navbar-bell" aria-label="notifications">
+      <button
+        className="navbar-bell"
+        aria-label="alerts"
+        onClick={() => scrollToSection('alerts')}
+      >
         <span className="material-symbols-outlined">notifications_active</span>
-      </button>
-
-      <button className="navbar-admin-login" onClick={() => navigate('/admin/login')}>
-        {t('nav.adminLogin')}
       </button>
     </>
   );

@@ -1,4 +1,3 @@
-import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { scrollToSection } from '../../utils/scrollToSection';
@@ -18,7 +17,6 @@ const Footer = () => {
   return (
     <footer className="footer">
       <div className="footer-container">
-
         {/* Brand */}
         <div className="footer-brand">
           <h2 className="footer-logo">Bhu Rakshak</h2>
@@ -29,10 +27,26 @@ const Footer = () => {
         <div className="footer-section">
           <h4>{t('footer.quickLinks')}</h4>
           <ul>
-            <li><a href="#home" onClick={handleNav('home')}>{t('nav.home')}</a></li>
-            <li><a href="#report-incident" onClick={handleNav('report-incident')}>{t('nav.reportIncident')}</a></li>
-            <li><a href="#alerts" onClick={handleNav('alerts')}>{t('nav.alerts')}</a></li>
-            <li><a href="#" onClick={(e) => e.preventDefault()}>{t('footer.authorityDashboard')}</a></li>
+            <li>
+              <a href="#home" onClick={handleNav('home')}>
+                {t('nav.home')}
+              </a>
+            </li>
+            <li>
+              <a href="#heatmap" onClick={handleNav('heatmap')}>
+                {t('nav.map')}
+              </a>
+            </li>
+            <li>
+              <a href="#alerts" onClick={handleNav('alerts')}>
+                {t('nav.alerts')}
+              </a>
+            </li>
+            <li>
+              <a href="#about" onClick={handleNav('about')}>
+                {t('nav.about')}
+              </a>
+            </li>
           </ul>
         </div>
 
@@ -50,11 +64,14 @@ const Footer = () => {
         <div className="footer-section">
           <h4>{t('footer.credits')}</h4>
           <ul className="footer-attribution">
-            <li>Icons by <a href="https://www.flaticon.com" target="_blank" rel="noreferrer">Flaticon</a></li>
-            {/* Add per-icon attribution lines here as required by license */}
+            <li>
+              Icons by{' '}
+              <a href="https://www.flaticon.com" target="_blank" rel="noreferrer">
+                Flaticon
+              </a>
+            </li>
           </ul>
         </div>
-
       </div>
 
       {/* Disclaimer */}

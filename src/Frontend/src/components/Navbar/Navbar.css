@@ -108,22 +108,7 @@
   display: flex;
   align-items: center;
 }
-.navbar-admin-login {
-  background-color: #22C55E;
-  color: #064e3b;
-  border: none;
-  padding: 0.5rem 1.25rem;
-  border-radius: 1.75rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.2s ease;
-  white-space: nowrap;
-}
 
-.navbar-admin-login:hover {
-  opacity: 0.85;
-}
 
 .navbar-hamburger {
   display: none;
@@ -184,7 +169,6 @@
     font-size: 0.88rem;
   }
 
-  .navbar-admin-login,
   .navbar-lang-toggle {
     font-size: 0.85rem;
     padding-left: 1rem;
@@ -254,11 +238,7 @@
     width: 100%;
   }
 
-  .mobile-menu .navbar-admin-login {
-    width: 100%;
-    text-align: center;
-    padding: 0.6rem;
-  }
+  
 
   .mobile-menu .lang-select-wrapper {
     width: 100%;

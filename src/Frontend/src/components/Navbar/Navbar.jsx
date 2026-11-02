@@ -18,7 +18,7 @@ function Navbar() {
 
   const navItems = [
     { id: 'home', labelKey: 'nav.home' },
-    { id: 'report-incident', labelKey: 'nav.reportIncident' },
+    { id: 'heatmap', labelKey: 'nav.map' },
     { id: 'alerts', labelKey: 'nav.alerts' },
     { id: 'about', labelKey: 'nav.about' },
   ];
@@ -26,7 +26,14 @@ function Navbar() {
   return (
     <>
       <nav className="navbar">
-        <div className="navbar-logo" onClick={() => { navigate('/'); scrollToSection('home'); }} style={{ cursor: 'pointer' }}>
+        <div
+          className="navbar-logo"
+          onClick={() => {
+            navigate('/');
+            scrollToSection('home');
+          }}
+          style={{ cursor: 'pointer' }}
+        >
           <span className="navbar-brand">Bhu Rakshak</span>
         </div>
 

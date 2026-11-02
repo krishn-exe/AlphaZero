@@ -5,9 +5,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 
 const mapRoutes = require('./routes/mapRoutes');
-const incidentRoutes = require('./routes/incidentRoutes');
 const subscribeRoutes = require('./routes/subscribeRoutes');
-const adminAuthRoutes = require('./routes/adminAuthRoutes');
 const { getNationalHeatmap } = require('./controllers/mapController');
 
 const app = express();
@@ -29,9 +27,7 @@ app.get('/api/data/national', getNationalHeatmap);
 // Routes
 app.use('/api/map', mapRoutes);
 app.use('/api/predictions', mapRoutes); // Alias for predictions endpoint
-app.use('/api/incidents', incidentRoutes);
 app.use('/api/subscribe', subscribeRoutes);
-app.use('/api/admin', adminAuthRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
