@@ -1,4 +1,8 @@
-require('dotenv').config();
+const path = require('path');
+// Load .env from root project directory first, fallback to local if needed
+require('dotenv').config({ path: path.resolve(__dirname, '../../../../.env') });
+require('dotenv').config(); // also loads local .env if present
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');

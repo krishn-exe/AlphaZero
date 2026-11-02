@@ -29,10 +29,13 @@ services:
     environment:
       PORT: 5000
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-landslide_db}?schema=public
-      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_change_in_production}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
       AIML_API_KEY: ${AIML_API_KEY:-aiml_shared_secret_key}
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     networks:
       - landslide-network
 
