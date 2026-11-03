@@ -37,7 +37,7 @@ const NER_KEY_CITIES = [
  * Creates custom HTML marker icon for landmark cities (matching Image 2)
  */
 function createCityMarkerIcon(cityName, riskPercent) {
-  const riskClass = riskPercent >= 70 ? "critical" : riskPercent >= 50 ? "high" : "";
+  const riskClass = riskPercent >= 70 ? "critical" : riskPercent >= 50 ? "high" : riskPercent >= 30 ? "medium" : "low";
   const html = `
     <div class="city-marker-content">
       <div class="city-marker-dot"></div>
@@ -385,10 +385,10 @@ function Heatmap() {
           {heatData?.points && heatData.points.length > 0 && (
             <HeatmapLayer
               points={heatData.points}
-              radius={34}
-              blur={22}
+              radius={24}
+              blur={18}
               max={1.0}
-              opacity={0.84}
+              opacity={0.82}
             />
           )}
 
@@ -437,7 +437,7 @@ function Heatmap() {
               <strong
                 style={{
                   fontSize: "20px",
-                  color: selectedLocation.baseRisk >= 0.7 ? "#ef4444" : selectedLocation.baseRisk >= 0.5 ? "#f97316" : "#f59e0b",
+                  color: selectedLocation.baseRisk >= 0.7 ? "#ef4444" : selectedLocation.baseRisk >= 0.5 ? "#f97316" : selectedLocation.baseRisk >= 0.3 ? "#facc15" : "#22c55e",
                 }}
               >
                 {Math.round(selectedLocation.baseRisk * 100)}%
@@ -447,18 +447,18 @@ function Heatmap() {
         )}
 
         {/* =====================================================
-            BOTTOM HORIZONTAL GRADIENT LEGEND (MATCHING IMAGE 2 REFERENCE)
+            BOTTOM HORIZONTAL GRADIENT LEGEND (GREEN -> YELLOW -> RED)
         ===================================================== */}
         <div className="heat-bottom-legend">
           <div className="heat-legend-title">
-            <span>🔥 Landslide Risk Intensity</span>
+            <span>Landslide Risk Intensity</span>
           </div>
           <div className="heat-legend-bar" />
           <div className="heat-legend-ticks">
-            <span>0% (Low)</span>
-            <span>35% (Moderate)</span>
-            <span>65% (High)</span>
-            <span>100% (Severe)</span>
+            <span style={{ color: "#22c55e" }}>0% (Low)</span>
+            <span style={{ color: "#facc15" }}>35% (Moderate)</span>
+            <span style={{ color: "#f97316" }}>65% (High)</span>
+            <span style={{ color: "#ef4444" }}>100% (Severe)</span>
           </div>
         </div>
 
