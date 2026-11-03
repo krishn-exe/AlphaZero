@@ -357,7 +357,10 @@ function Heatmap() {
           zoom={8}
           minZoom={6}
           maxZoom={13}
-          scrollWheelZoom={false}
+          scrollWheelZoom={true}
+          touchZoom={true}
+          dragging={true}
+          tapHold={false}
           style={{ height: "100%", width: "100%", zIndex: 1 }}
         >
           {/* Animated search fly-to */}
