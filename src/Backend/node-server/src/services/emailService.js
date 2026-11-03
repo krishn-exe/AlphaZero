@@ -1,5 +1,6 @@
 const { getOtpEmailHtml } = require('../templates/otpEmailTemplate');
 const { getWelcomeEmailHtml } = require('../templates/welcomeEmailTemplate');
+const { getAizawlAlertEmailHtml } = require('../templates/aizawlAlertTemplate');
 
 let nodemailer = null;
 let transporter = null;
@@ -165,8 +166,44 @@ async function sendRiskAlertEmail(emails, locationName, newRiskLevel) {
   }
 }
 
+/**
+ * Sends a high-priority landslide alert email specifically for Aizawl district.
+ * Dispatched immediately upon OTP verification when Aizawl is chosen.
+ * Includes upcoming hazard detection, CTA to https://krishn.tech/#map, and general advice.
+ * 
+ * @param {string} email - Subscriber email address
+ */
+async function sendAizawlUrgentAlertEmail(email) {
+  const mailer = getTransporter();
+
+  if (!mailer) {
+    console.warn(`[emailService] SMTP not configured. Simulated Aizawl urgent alert for ${email}.`);
+    return { messageId: 'simulated-aizawl-alert-id' };
+  }
+
+  try {
+    const html = getAizawlAlertEmailHtml({
+      email,
+      websiteUrl: process.env.VITE_APP_URL || 'https://krishn.tech/',
+    });
+
+    const info = await mailer.sendMail({
+      from: BRAND_SENDER,
+      to: email,
+      subject: '🚨 URGENT: High Landslide Risk Detected in Aizawl District | Bhu Rakshak Alert',
+      html,
+    });
+
+    console.log(`[emailService] Aizawl urgent alert email dispatched to ${email}. Message ID: ${info.messageId}`);
+    return info;
+  } catch (err) {
+    console.error('[emailService] Failed to send Aizawl urgent alert email via SMTP:', err);
+  }
+}
+
 module.exports = {
   sendOtpEmail,
   sendConfirmationEmail,
   sendRiskAlertEmail,
+  sendAizawlUrgentAlertEmail,
 };

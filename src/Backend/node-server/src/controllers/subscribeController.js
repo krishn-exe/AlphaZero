@@ -23,14 +23,25 @@ async function resolveDistrict(districtIdentifier) {
   }
   // Try finding by name (case-insensitive)
   if (typeof districtIdentifier === 'string' && districtIdentifier.trim()) {
-    const district = await prisma.district.findFirst({
+    const trimmed = districtIdentifier.trim();
+    let district = await prisma.district.findFirst({
       where: {
         name: {
-          equals: districtIdentifier.trim(),
+          equals: trimmed,
           mode: 'insensitive',
         },
       },
     });
+    if (!district) {
+      district = await prisma.district.findFirst({
+        where: {
+          name: {
+            contains: trimmed,
+            mode: 'insensitive',
+          },
+        },
+      });
+    }
     if (district) return district;
   }
   return null;
@@ -210,11 +221,21 @@ const verifyOtp = async (req, res) => {
       },
     });
 
+    const districtName = updated.district ? updated.district.name : null;
+    const isAizawl = districtName && /aizawl/i.test(districtName);
+
     // If new subscriber, send welcome email
     if (wasUnverified) {
-      const districtName = updated.district ? updated.district.name : null;
       emailService.sendConfirmationEmail(updated.email, districtName, updated.pushEnabled).catch((err) => {
         console.error('[subscribeController] Non-fatal: Failed to send welcome email', err);
+      });
+    }
+
+    // Hardcoded Alert: If user entered Aizawl as their district, immediately dispatch the urgent landslide warning
+    if (isAizawl) {
+      console.log(`[subscribeController] Aizawl district verified for ${updated.email}. Dispatching urgent landslide warning email...`);
+      emailService.sendAizawlUrgentAlertEmail(updated.email).catch((err) => {
+        console.error('[subscribeController] Non-fatal: Failed to send Aizawl urgent alert email', err);
       });
     }
 
@@ -341,6 +362,13 @@ const updateSettings = async (req, res) => {
       data: dataToUpdate,
       include: { district: true },
     });
+
+    const updatedDistrictName = updated.district ? updated.district.name : null;
+    if (updatedDistrictName && /aizawl/i.test(updatedDistrictName)) {
+      emailService.sendAizawlUrgentAlertEmail(updated.email).catch((err) => {
+        console.error('[subscribeController] Non-fatal: Failed to send Aizawl alert on settings update', err);
+      });
+    }
 
     return res.status(200).json({
       message: 'Preferences successfully updated.',
