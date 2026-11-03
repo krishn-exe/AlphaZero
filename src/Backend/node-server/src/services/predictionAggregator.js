@@ -332,9 +332,10 @@ async function getLatestAggregatedJson(baseStorageDir) {
   // 3. Fallback to real ML model prediction output
   if (!targetCsv) {
     const candidates = [
+      path.join(__dirname, '../data/predicted_risk_output.csv'),
+      path.join(__dirname, '../../data/predicted_risk_output.csv'),
       path.join(__dirname, '../../Container/Heat/ML-model/predicted_risk_output.csv'),
       path.join(__dirname, '../../../Container/Heat/ML-model/predicted_risk_output.csv'),
-      path.join(__dirname, '../../test_predictions.csv'),
     ];
     for (const c of candidates) {
       if (fs.existsSync(c)) {

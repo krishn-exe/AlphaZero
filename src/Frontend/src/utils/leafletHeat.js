@@ -1,6 +1,6 @@
 /**
- * High-performance HTML5 Canvas Heatmap Layer for Leaflet & React Leaflet.
- * Based on the radial density coloring algorithm (simpleheat / Leaflet.heat).
+ * Leaflet Canvas Heatmap Layer.
+ * Renders smooth continuous thermal density gradients locked statically to geographic coordinates.
  */
 
 import { useEffect, useRef } from 'react';
@@ -8,7 +8,7 @@ import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 
 /**
- * Lightweight canvas heat renderer
+ * Fast HTML5 canvas radial gradient heat generator
  */
 function createSimpleHeat(canvas) {
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -20,13 +20,15 @@ function createSimpleHeat(canvas) {
   let circleRadius = 0;
   let gradPixels = null;
 
-  // Default color gradient matching critical disaster thresholds
-  let defaultGradient = {
-    0.10: '#3b82f6', // blue (Low)
-    0.30: '#10b981', // green (Moderate)
-    0.55: '#eab308', // yellow (Elevated)
-    0.75: '#f97316', // orange (High)
-    0.90: '#ef4444', // red (Severe/Critical)
+  // Thermal heat gradient matching Image 2:
+  // Pale creamy yellow -> Golden Amber -> Rich Orange -> Deep Crimson -> Dark Maroon
+  const defaultGradient = {
+    0.05: '#fef9c3', // Pale cream yellow
+    0.20: '#fde047', // Warm yellow
+    0.40: '#f59e0b', // Amber / golden
+    0.60: '#ea580c', // Bright orange-red
+    0.80: '#dc2626', // Deep red
+    0.95: '#7f1d1d', // Dark maroon / critical
   };
 
   function setGradient(grad = defaultGradient) {
@@ -45,7 +47,7 @@ function createSimpleHeat(canvas) {
     gradPixels = pCtx.getImageData(0, 0, 1, 256).data;
   }
 
-  function setRadius(r = 25, blur = 18) {
+  function setRadius(r = 34, blur = 22) {
     circleRadius = r + blur;
     circleCanvas = document.createElement('canvas');
     circleCanvas.width = circleCanvas.height = circleRadius * 2;
@@ -83,12 +85,12 @@ function createSimpleHeat(canvas) {
   }
 
   function draw(minOpacity = 0.05) {
-    if (!circleCanvas) setRadius(25, 18);
+    if (!circleCanvas) setRadius(34, 22);
     if (!gradPixels) setGradient(defaultGradient);
 
     ctx.clearRect(0, 0, width, height);
 
-    // 1. Draw grayscale alpha mask of all points
+    // 1. Draw alpha mask of all points
     for (let i = 0; i < dataPoints.length; i++) {
       const p = dataPoints[i];
       const x = p[0];
@@ -99,11 +101,11 @@ function createSimpleHeat(canvas) {
         continue;
       }
 
-      ctx.globalAlpha = Math.min(Math.max(val / maxVal, minOpacity), 1);
+      ctx.globalAlpha = Math.min(Math.max(val / maxVal, minOpacity), 1.0);
       ctx.drawImage(circleCanvas, x - circleRadius, y - circleRadius);
     }
 
-    // 2. Colorize canvas pixels based on alpha channel
+    // 2. Colorize based on alpha intensity
     const img = ctx.getImageData(0, 0, width, height);
     const pixels = img.data;
     const len = pixels.length;
@@ -132,36 +134,26 @@ function createSimpleHeat(canvas) {
 }
 
 /**
- * React Leaflet Canvas Heatmap Component
- * 
- * @param {Object} props
- * @param {Array<Array<number>>} props.points - [[lat, lng, intensity], ...]
- * @param {number} [props.radius=26] - Point radius in pixels
- * @param {number} [props.blur=18] - Blur spread in pixels
- * @param {number} [props.max=1.0] - Maximum intensity normalization ceiling
- * @param {number} [props.opacity=0.82] - Overall layer opacity
- * @param {Object} [props.gradient] - Custom color gradient
+ * HeatmapLayer Component for React Leaflet
+ * Statically locked to geographic coordinates without drifting during pan/zoom.
  */
 export function HeatmapLayer({
   points = [],
-  radius = 26,
-  blur = 18,
+  radius = 34,
+  blur = 22,
   max = 1.0,
   opacity = 0.82,
-  gradient,
 }) {
   const map = useMap();
   const canvasRef = useRef(null);
   const heatRef = useRef(null);
 
   useEffect(() => {
-    // Create dedicated canvas element inside Leaflet overlay pane
-    const canvas = L.DomUtil.create('canvas', 'leaflet-heatmap-layer');
+    // Canvas element inside overlayPane
+    const canvas = L.DomUtil.create('canvas', 'leaflet-heatmap-canvas');
     canvas.style.position = 'absolute';
-    canvas.style.left = '0';
-    canvas.style.top = '0';
     canvas.style.pointerEvents = 'none';
-    canvas.style.zIndex = '350'; // Over OSM tiles, under popups/UI
+    canvas.style.zIndex = '300';
 
     const pane = map.getPanes().overlayPane;
     pane.appendChild(canvas);
@@ -171,12 +163,15 @@ export function HeatmapLayer({
     heatRef.current = heat;
 
     function reset() {
-      const size = map.getSize();
-      const origin = map.getPixelOrigin();
-      const panePos = L.DomUtil.getPosition(pane) || { x: 0, y: 0 };
+      // Position canvas at layerPoint of (0,0) so Leaflet moves it automatically during pan
+      const topLeft = map.containerPointToLayerPoint([0, 0]);
+      L.DomUtil.setPosition(canvas, topLeft);
 
-      canvas.style.transform = `translate3d(${-panePos.x}px, ${-panePos.y}px, 0)`;
-      heat.resize(size.x, size.y);
+      const size = map.getSize();
+      if (canvas.width !== size.x || canvas.height !== size.y) {
+        heat.resize(size.x, size.y);
+      }
+
       redraw();
     }
 
@@ -189,23 +184,32 @@ export function HeatmapLayer({
 
       heat.setMax(max);
       heat.setRadius(radius, blur);
-      if (gradient) heat.setGradient(gradient);
 
-      // Convert lat/lng to container pixel coordinates
+      const size = map.getSize();
+      const r = radius + blur;
       const pixelPoints = [];
+
       for (let i = 0; i < points.length; i++) {
         const pt = points[i];
-        const latLng = L.latLng(pt[0], pt[1]);
-        const containerPt = map.latLngToContainerPoint(latLng);
-        pixelPoints.push([containerPt.x, containerPt.y, pt[2] || 0.5]);
+        const containerPt = map.latLngToContainerPoint([pt[0], pt[1]]);
+
+        // Filter points within viewport + padding
+        if (
+          containerPt.x >= -r &&
+          containerPt.x <= size.x + r &&
+          containerPt.y >= -r &&
+          containerPt.y <= size.y + r
+        ) {
+          pixelPoints.push([containerPt.x, containerPt.y, pt[2] || 0.3]);
+        }
       }
 
       heat.setData(pixelPoints);
-      heat.draw(0.05);
+      heat.draw(0.04);
       canvas.style.opacity = String(opacity);
     }
 
-    map.on('move', reset);
+    // Leaflet moves overlayPane during pan; we reset on moveend and zoomend
     map.on('moveend', reset);
     map.on('zoomend', reset);
     map.on('resize', reset);
@@ -213,7 +217,6 @@ export function HeatmapLayer({
     reset();
 
     return () => {
-      map.off('move', reset);
       map.off('moveend', reset);
       map.off('zoomend', reset);
       map.off('resize', reset);
@@ -221,28 +224,7 @@ export function HeatmapLayer({
         canvas.parentNode.removeChild(canvas);
       }
     };
-  }, [map]);
-
-  // Handle dynamic prop updates (sliders, points change)
-  useEffect(() => {
-    if (!canvasRef.current || !heatRef.current) return;
-
-    canvasRef.current.style.opacity = String(opacity);
-    heatRef.current.setRadius(radius, blur);
-    heatRef.current.setMax(max);
-    if (gradient) heatRef.current.setGradient(gradient);
-
-    const pixelPoints = [];
-    for (let i = 0; i < points.length; i++) {
-      const pt = points[i];
-      const latLng = L.latLng(pt[0], pt[1]);
-      const containerPt = map.latLngToContainerPoint(latLng);
-      pixelPoints.push([containerPt.x, containerPt.y, pt[2] || 0.5]);
-    }
-
-    heatRef.current.setData(pixelPoints);
-    heatRef.current.draw(0.05);
-  }, [map, points, radius, blur, max, opacity, gradient]);
+  }, [map, points, radius, blur, max, opacity]);
 
   return null;
 }

@@ -1,39 +1,73 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MapContainer,
   TileLayer,
   GeoJSON,
-  CircleMarker,
-  Tooltip,
+  Marker,
   useMap,
 } from "react-leaflet";
 import L from "leaflet";
 
 import "leaflet/dist/leaflet.css";
-import "leaflet-control-geocoder";
-import "leaflet-control-geocoder/dist/Control.Geocoder.css";
-
 import { HeatmapLayer } from "../../utils/leafletHeat";
+import { NER_DISTRICTS } from "../../data/districts";
 import "./heatmap.css";
 
 /* =====================================================
-   GEOCODER COMPONENT
+   PROMINENT NORTHEAST REGION KEY CITIES
+   Rendered with white ring and bold labels like Image 2
 ===================================================== */
-function Geocoder({ position = "topright" }) {
+const NER_KEY_CITIES = [
+  { name: "Guwahati", state: "Assam", lat: 26.1445, lng: 91.7362, baseRisk: 0.38 },
+  { name: "Shillong", state: "Meghalaya", lat: 25.5788, lng: 91.8933, baseRisk: 0.68 },
+  { name: "Aizawl", state: "Mizoram", lat: 23.7271, lng: 92.7176, baseRisk: 0.74 },
+  { name: "Itanagar", state: "Arunachal Pradesh", lat: 27.0844, lng: 93.6053, baseRisk: 0.52 },
+  { name: "Kohima", state: "Nagaland", lat: 25.6751, lng: 94.1086, baseRisk: 0.61 },
+  { name: "Gangtok", state: "Sikkim", lat: 27.3389, lng: 88.6065, baseRisk: 0.46 },
+  { name: "Imphal", state: "Manipur", lat: 24.8170, lng: 93.9368, baseRisk: 0.49 },
+  { name: "Agartala", state: "Tripura", lat: 23.8315, lng: 91.2868, baseRisk: 0.34 },
+  { name: "Silchar", state: "Assam", lat: 24.8333, lng: 92.7789, baseRisk: 0.59 },
+  { name: "Tura", state: "Meghalaya", lat: 25.5144, lng: 90.2033, baseRisk: 0.63 },
+  { name: "Jorhat", state: "Assam", lat: 26.7509, lng: 94.2037, baseRisk: 0.41 },
+  { name: "Dibrugarh", state: "Assam", lat: 27.4728, lng: 94.9120, baseRisk: 0.44 },
+];
+
+/**
+ * Creates custom HTML marker icon for landmark cities (matching Image 2)
+ */
+function createCityMarkerIcon(cityName, riskPercent) {
+  const riskClass = riskPercent >= 70 ? "critical" : riskPercent >= 50 ? "high" : "";
+  const html = `
+    <div class="city-marker-content">
+      <div class="city-marker-dot"></div>
+      <div class="city-marker-label">
+        ${cityName}
+        <span class="city-marker-score ${riskClass}">${riskPercent}%</span>
+      </div>
+    </div>
+  `;
+  return L.divIcon({
+    html,
+    className: "city-marker-icon",
+    iconSize: [120, 24],
+    iconAnchor: [6, 6],
+  });
+}
+
+/**
+ * Map Controller to execute animated flyTo on search selection
+ */
+function MapFlyTo({ target }) {
   const map = useMap();
-
   useEffect(() => {
-    const control = L.Control.geocoder({
-      defaultMarkGeocode: true,
-      position,
-    }).addTo(map);
-
-    return () => {
-      map.removeControl(control);
-    };
-  }, [map, position]);
-
+    if (target) {
+      map.flyTo([target.lat, target.lng], 10, {
+        duration: 1.5,
+        easeLinearity: 0.25,
+      });
+    }
+  }, [target, map]);
   return null;
 }
 
@@ -43,24 +77,22 @@ function Geocoder({ position = "topright" }) {
 function Heatmap() {
   const { t, i18n } = useTranslation();
 
-  // Heatmap Controls State (Matches Image 2 GIS controls)
-  const [radius, setRadius] = useState(28);
-  const [opacity, setOpacity] = useState(0.85);
-  const [blur, setBlur] = useState(18);
-  const [showHeatmap, setShowHeatmap] = useState(true);
-  const [showHotspots, setShowHotspots] = useState(false);
-  const [showDistricts, setShowDistricts] = useState(true);
-
   // Data states
-  const [heatData, setHeatData] = useState(null); // { updatedAt, slot, stats, points: [[lat, lng, risk], ...] }
+  const [heatData, setHeatData] = useState(null);
   const [districtGeoJson, setDistrictGeoJson] = useState(null);
-  const [selectedPoint, setSelectedPoint] = useState(null);
+  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [flyTarget, setFlyTarget] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const searchInputRef = useRef(null);
+
   const API_URL =
     import.meta.env.VITE_API_URL ||
-    ("".replace(/\/+$/, "")); // Empty default resolves to current origin
+    ("".replace(/\/+$/, ""));
 
   /* =====================================================
      FETCH REAL AGGREGATED HEATMAP PREDICTIONS & BOUNDARIES
@@ -73,7 +105,7 @@ function Heatmap() {
         setLoading(true);
         setError(null);
 
-        // 1. Fetch the real aggregated AI predictions (generated after collision handling & averaging)
+        // Fetch real aggregated predictions (averaging collisions from ML model)
         const heatRes = await fetch(`${API_URL}/api/predictions/heatmap`, {
           signal: controller.signal,
         });
@@ -85,7 +117,7 @@ function Heatmap() {
         const heatJson = await heatRes.json();
         setHeatData(heatJson);
 
-        // 2. Fetch district boundary geometries for reference outlines
+        // Fetch district boundaries for subtle geographic reference outlines
         try {
           const districtRes = await fetch(`${API_URL}/api/map/national`, {
             signal: controller.signal,
@@ -101,7 +133,7 @@ function Heatmap() {
         }
       } catch (err) {
         if (err.name !== "AbortError") {
-          console.error("Heatmap data load error:", err);
+          console.error("Heatmap load error:", err);
           setError(err.message);
         }
       } finally {
@@ -117,113 +149,119 @@ function Heatmap() {
   }, [API_URL]);
 
   /* =====================================================
-     CALCULATE METRICS & CRITICAL HOTSPOTS
+     SEARCH LIST OF ALL DISTRICTS AND CITIES
   ===================================================== */
-  const metrics = useMemo(() => {
-    if (!heatData?.points || heatData.points.length === 0) {
-      return {
-        total: 0,
-        maxRisk: 0,
-        avgRisk: 0,
-        criticalCount: 0,
-        highCount: 0,
-        moderateCount: 0,
-        lowCount: 0,
-        hotspots: [],
-      };
-    }
+  const allSearchableLocations = useMemo(() => {
+    const list = [];
 
-    let maxRisk = 0;
-    let sumRisk = 0;
-    let criticalCount = 0; // >= 0.75
-    let highCount = 0;     // 0.50 - 0.74
-    let moderateCount = 0; // 0.25 - 0.49
-    let lowCount = 0;      // < 0.25
-    const hotspots = [];
-
-    for (let i = 0; i < heatData.points.length; i++) {
-      const p = heatData.points[i];
-      const risk = p[2];
-      sumRisk += risk;
-      if (risk > maxRisk) maxRisk = risk;
-
-      if (risk >= 0.75) {
-        criticalCount++;
-        hotspots.push(p);
-      } else if (risk >= 0.5) {
-        highCount++;
-        if (risk >= 0.70) hotspots.push(p);
-      } else if (risk >= 0.25) {
-        moderateCount++;
-      } else {
-        lowCount++;
-      }
-    }
-
-    const total = heatData.points.length;
-    const avgRisk = total > 0 ? (sumRisk / total) : 0;
-
-    return {
-      total,
-      maxRisk: Number(maxRisk.toFixed(4)),
-      avgRisk: Number(avgRisk.toFixed(4)),
-      criticalCount,
-      highCount,
-      moderateCount,
-      lowCount,
-      hotspots: hotspots.slice(0, 50), // top critical hotspots for markers
-    };
-  }, [heatData]);
-
-  /* =====================================================
-     DISTRICT REFERENCE OUTLINES STYLE
-  ===================================================== */
-  const districtStyle = {
-    color: "#475569",
-    weight: 1,
-    fillColor: "#0f172a",
-    fillOpacity: 0.05,
-    dashArray: "3, 3",
-  };
-
-  const onEachDistrict = (feature, layer) => {
-    const props = feature.properties || {};
-    const districtName = t(`districts.${props.name}`, { defaultValue: props.name || "District" });
-    const stateName = t(`states.${props.state}`, { defaultValue: props.state || "" });
-
-    layer.on("mouseover", () => {
-      layer.setStyle({
-        weight: 2,
-        color: "#38bdf8",
-        fillOpacity: 0.12,
-        dashArray: "",
+    // Add Key Cities
+    NER_KEY_CITIES.forEach((c) => {
+      list.push({
+        id: `city-${c.name}`,
+        name: c.name,
+        state: c.state,
+        lat: c.lat,
+        lng: c.lng,
+        type: "City",
+        baseRisk: c.baseRisk,
       });
     });
 
-    layer.on("mouseout", () => {
-      layer.setStyle(districtStyle);
+    // Add Districts from NER_DISTRICTS
+    NER_DISTRICTS.forEach((group) => {
+      group.districts.forEach((d) => {
+        // Approximate district coordinates from boundary or city
+        const matchingFeature = districtGeoJson?.features?.find(
+          (f) => f.properties?.name?.toLowerCase() === d.toLowerCase()
+        );
+        if (matchingFeature && matchingFeature.geometry) {
+          let lat = 26.0;
+          let lng = 92.0;
+          if (matchingFeature.properties?.centerLat && matchingFeature.properties?.centerLng) {
+            lat = matchingFeature.properties.centerLat;
+            lng = matchingFeature.properties.centerLng;
+          }
+          list.push({
+            id: `district-${d}`,
+            name: d,
+            state: group.state,
+            lat,
+            lng,
+            type: "District",
+            baseRisk: (matchingFeature.properties?.riskScore || 45) / 100,
+          });
+        }
+      });
     });
 
-    layer.bindTooltip(`
-      <div style="font-family: Arial, sans-serif; min-width: 110px;">
-        <strong>${districtName}</strong><br/>
-        <span style="color:#94a3b8; font-size:12px;">${stateName}</span>
-      </div>
-    `);
+    return list;
+  }, [districtGeoJson]);
+
+  // Filtered search results
+  const searchResults = useMemo(() => {
+    if (!searchQuery || !searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase().trim();
+    return allSearchableLocations
+      .filter((loc) => loc.name.toLowerCase().includes(q) || loc.state.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [searchQuery, allSearchableLocations]);
+
+  // Handle location selection from search
+  const handleSelectLocation = (loc) => {
+    setSearchQuery(loc.name);
+    setIsDropdownOpen(false);
+    setSelectedLocation(loc);
+    setFlyTarget({ lat: loc.lat, lng: loc.lng });
   };
 
-  const resetControls = () => {
-    setRadius(28);
-    setOpacity(0.85);
-    setBlur(18);
-    setShowHeatmap(true);
-    setShowHotspots(false);
+  /* =====================================================
+     DYNAMIC CITY RISK SCORES CALCULATED FROM HEATMAP POINTS
+  ===================================================== */
+  const citiesWithRisk = useMemo(() => {
+    if (!heatData?.points || heatData.points.length === 0) {
+      return NER_KEY_CITIES.map((c) => ({
+        ...c,
+        riskPercent: Math.round(c.baseRisk * 100),
+      }));
+    }
+
+    return NER_KEY_CITIES.map((city) => {
+      // Find nearest prediction points within ~0.35 deg (~35km)
+      let sum = 0;
+      let count = 0;
+      for (let i = 0; i < heatData.points.length; i++) {
+        const pt = heatData.points[i];
+        const dLat = pt[0] - city.lat;
+        const dLng = pt[1] - city.lng;
+        const distSq = dLat * dLat + dLng * dLng;
+        if (distSq <= 0.12) {
+          sum += pt[2];
+          count++;
+        }
+      }
+
+      const calculatedRisk = count > 0 ? (sum / count) : city.baseRisk;
+      const riskPercent = Math.round(calculatedRisk * 100);
+
+      return {
+        ...city,
+        riskPercent,
+      };
+    });
+  }, [heatData]);
+
+  // Subtle clean reference boundaries style
+  const districtStyle = {
+    color: "#64748b",
+    weight: 0.8,
+    fillOpacity: 0.02,
+    dashArray: "2, 4",
   };
 
   return (
     <section style={{ width: "100%", background: "#09090b", padding: "24px 0" }}>
-      {/* TITLE & HEADER */}
-      <div style={{ maxWidth: "1400px", margin: "0 auto 18px", padding: "0 20px" }}>
+      {/* SECTION TITLE & HEADER */}
+      <div style={{ maxWidth: "1400px", margin: "0 auto 16px", padding: "0 20px" }}>
         <p
           style={{
             color: "#22c55e",
@@ -245,16 +283,86 @@ function Heatmap() {
         </p>
       </div>
 
-      {/* MAP CONTAINER */}
+      {/* MAP WRAPPER */}
       <div className="heatmap-wrapper">
+        {/* =====================================================
+            SEARCH BAR FEATURE (TOP-CENTER)
+        ===================================================== */}
+        <div className="map-search-container">
+          <div className="map-search-bar">
+            <span className="map-search-icon">🔍</span>
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Search district or city in Northeast India (e.g., Shillong, Aizawl, Guwahati)..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setIsDropdownOpen(true);
+              }}
+              onFocus={() => setIsDropdownOpen(true)}
+              className="map-search-input"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="map-search-clear"
+                onClick={() => {
+                  setSearchQuery("");
+                  setIsDropdownOpen(false);
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Autocomplete Dropdown */}
+          {isDropdownOpen && searchResults.length > 0 && (
+            <ul className="map-search-dropdown">
+              {searchResults.map((loc) => {
+                const score = Math.round(loc.baseRisk * 100);
+                const isHigh = score >= 50;
+                return (
+                  <li
+                    key={loc.id}
+                    className="map-search-item"
+                    onClick={() => handleSelectLocation(loc)}
+                  >
+                    <div>
+                      <strong>{loc.name}</strong>
+                      <span className="search-item-state">({loc.state})</span>
+                    </div>
+                    <span
+                      className="search-item-risk"
+                      style={{
+                        background: isHigh ? "rgba(239, 68, 68, 0.2)" : "rgba(245, 158, 11, 0.2)",
+                        color: isHigh ? "#ef4444" : "#f59e0b",
+                      }}
+                    >
+                      {score}% Risk
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        {/* =====================================================
+            LEAFLET MAP
+        ===================================================== */}
         <MapContainer
           center={[25.7, 92.2]}
           zoom={8}
           minZoom={6}
-          maxZoom={14}
+          maxZoom={13}
           scrollWheelZoom={false}
           style={{ height: "100%", width: "100%", zIndex: 1 }}
         >
+          {/* Animated search fly-to */}
+          {flyTarget && <MapFlyTo target={flyTarget} />}
+
           {/* Base Map: OpenStreetMap */}
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -262,238 +370,94 @@ function Heatmap() {
           />
 
           {/* Reference District Boundary Outlines */}
-          {showDistricts && districtGeoJson && (
+          {districtGeoJson && (
             <GeoJSON
               key={`${i18n.language}-${districtGeoJson.features?.length}`}
               data={districtGeoJson}
               style={districtStyle}
-              onEachFeature={onEachDistrict}
             />
           )}
 
-          {/* REAL PREDICTION HEATMAP LAYER */}
-          {showHeatmap && heatData?.points && heatData.points.length > 0 && (
+          {/* REAL STATIC DENSITY HEATMAP LAYER */}
+          {heatData?.points && heatData.points.length > 0 && (
             <HeatmapLayer
               points={heatData.points}
-              radius={radius}
-              blur={blur}
-              opacity={opacity}
+              radius={34}
+              blur={22}
               max={1.0}
+              opacity={0.84}
             />
           )}
 
-          {/* OPTIONAL CRITICAL HOTSPOTS HIGHLIGHT MARKERS */}
-          {showHotspots &&
-            metrics.hotspots.map((pt, idx) => (
-              <CircleMarker
-                key={`hotspot-${idx}`}
-                center={[pt[0], pt[1]]}
-                radius={7}
-                pathOptions={{
-                  color: "#ffffff",
-                  weight: 2,
-                  fillColor: "#ef4444",
-                  fillOpacity: 0.95,
-                }}
-                eventHandlers={{
-                  click: () => {
-                    setSelectedPoint({ lat: pt[0], lng: pt[1], risk: pt[2] });
-                  },
-                }}
-              >
-                <Tooltip direction="top" offset={[0, -6]}>
-                  <div style={{ textAlign: "center", fontSize: "11px" }}>
-                    <strong>🚨 Hotspot</strong><br />
-                    <span>Risk: <strong>{(pt[2] * 100).toFixed(1)}%</strong></span><br />
-                    <small>{pt[0].toFixed(4)}, {pt[1].toFixed(4)}</small>
-                  </div>
-                </Tooltip>
-              </CircleMarker>
-            ))}
-
-          <Geocoder position="topright" />
+          {/* KEY CITY LABELS & CIRCLES (MATCHING IMAGE 2 REFERENCE) */}
+          {citiesWithRisk.map((city) => (
+            <Marker
+              key={city.name}
+              position={[city.lat, city.lng]}
+              icon={createCityMarkerIcon(city.name, city.riskPercent)}
+              eventHandlers={{
+                click: () => {
+                  setSelectedLocation({
+                    name: city.name,
+                    state: city.state,
+                    baseRisk: city.riskPercent / 100,
+                  });
+                },
+              }}
+            />
+          ))}
         </MapContainer>
 
         {/* =====================================================
-            FLOATING CONTROLS PANEL (Matches User's Reference Image)
+            SELECTED LOCATION POPUP CARD (Top-Right)
         ===================================================== */}
-        <div className="heat-controls-panel">
-          <div className="heat-panel-header">
-            <h4 className="heat-panel-title">
-              <span className="heat-icon">🔥</span> HEAT MAPPING
-            </h4>
-            <span className="heat-badge-slot">
-              {heatData?.slot && heatData.slot !== 'none' ? `Slot: ${heatData.slot}` : 'LIVE'}
-            </span>
-          </div>
-
-          {/* Radius Slider */}
-          <div className="heat-control-group">
-            <div className="heat-slider-label">
-              <span>Radius</span>
-              <span className="heat-slider-val">{radius}px</span>
-            </div>
-            <input
-              type="range"
-              min={10}
-              max={60}
-              value={radius}
-              onChange={(e) => setRadius(Number(e.target.value))}
-              className="heat-slider"
-            />
-          </div>
-
-          {/* Opacity Slider */}
-          <div className="heat-control-group">
-            <div className="heat-slider-label">
-              <span>Opacity</span>
-              <span className="heat-slider-val">{Math.round(opacity * 100)}%</span>
-            </div>
-            <input
-              type="range"
-              min={20}
-              max={100}
-              value={Math.round(opacity * 100)}
-              onChange={(e) => setOpacity(Number(e.target.value) / 100)}
-              className="heat-slider"
-            />
-          </div>
-
-          {/* Blur / Diffusion Slider */}
-          <div className="heat-control-group">
-            <div className="heat-slider-label">
-              <span>Blur & Diffusion</span>
-              <span className="heat-slider-val">{blur}px</span>
-            </div>
-            <input
-              type="range"
-              min={5}
-              max={40}
-              value={blur}
-              onChange={(e) => setBlur(Number(e.target.value))}
-              className="heat-slider"
-            />
-          </div>
-
-          {/* Density Gradient Spectrum */}
-          <div className="gradient-bar-container">
-            <div className="gradient-bar" />
-            <div className="gradient-labels">
-              <span>Low (0.0)</span>
-              <span>Moderate</span>
-              <span>Severe (1.0)</span>
-            </div>
-          </div>
-
-          {/* Risk Levels Legend (Real Data) */}
-          <div className="heat-legend-list">
-            <div className="heat-legend-item">
-              <div>
-                <span className="legend-color-dot" style={{ background: "#ef4444" }} />
-                <span>Critical / Severe (&ge; 0.75)</span>
-              </div>
-              <strong style={{ color: "#ef4444" }}>{metrics.criticalCount}</strong>
-            </div>
-            <div className="heat-legend-item">
-              <div>
-                <span className="legend-color-dot" style={{ background: "#f97316" }} />
-                <span>High Risk (0.50 – 0.74)</span>
-              </div>
-              <strong style={{ color: "#f97316" }}>{metrics.highCount}</strong>
-            </div>
-            <div className="heat-legend-item">
-              <div>
-                <span className="legend-color-dot" style={{ background: "#eab308" }} />
-                <span>Medium (0.25 – 0.49)</span>
-              </div>
-              <strong style={{ color: "#eab308" }}>{metrics.moderateCount}</strong>
-            </div>
-            <div className="heat-legend-item">
-              <div>
-                <span className="legend-color-dot" style={{ background: "#3b82f6" }} />
-                <span>Low (&lt; 0.25)</span>
-              </div>
-              <strong style={{ color: "#38bdf8" }}>{metrics.lowCount}</strong>
-            </div>
-          </div>
-
-          {/* Layer Toggles */}
-          <div className="heat-toggles">
-            <label className="heat-toggle-row">
-              <span>Heatmap Density Layer</span>
-              <input
-                type="checkbox"
-                checked={showHeatmap}
-                onChange={(e) => setShowHeatmap(e.target.checked)}
-              />
-            </label>
-
-            <label className="heat-toggle-row">
-              <span>District Outlines</span>
-              <input
-                type="checkbox"
-                checked={showDistricts}
-                onChange={(e) => setShowDistricts(e.target.checked)}
-              />
-            </label>
-
-            <label className="heat-toggle-row">
-              <span>Highlight Severe Hotspots</span>
-              <input
-                type="checkbox"
-                checked={showHotspots}
-                onChange={(e) => setShowHotspots(e.target.checked)}
-              />
-            </label>
-
-            <button type="button" className="btn-reset-heat" onClick={resetControls}>
-              Reset Controls
-            </button>
-          </div>
-        </div>
-
-        {/* TOP RIGHT LIVE STATS CARD */}
-        <div className="heat-stats-card">
-          <div className="stat-column">
-            <span className="stat-label">Model Grid Points</span>
-            <span className="stat-val">{metrics.total.toLocaleString()}</span>
-          </div>
-          <div className="stat-column">
-            <span className="stat-label">Max Risk</span>
-            <span className={`stat-val ${metrics.maxRisk >= 0.75 ? "critical" : "moderate"}`}>
-              {(metrics.maxRisk * 100).toFixed(1)}%
-            </span>
-          </div>
-          <div className="stat-column">
-            <span className="stat-label">Avg Saturation</span>
-            <span className="stat-val">{(metrics.avgRisk * 100).toFixed(1)}%</span>
-          </div>
-        </div>
-
-        {/* POINT INSPECTOR (When hotspot is clicked) */}
-        {selectedPoint && (
-          <div className="heat-inspector-card">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-              <span style={{ fontSize: "11px", color: "#38bdf8", fontWeight: "700", letterSpacing: "1px" }}>
-                COORDINATE INSPECTOR
+        {selectedLocation && (
+          <div className="city-selected-panel">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
+              <span style={{ fontSize: "10px", color: "#38bdf8", fontWeight: "700", letterSpacing: "1px", textTransform: "uppercase" }}>
+                LOCATION SELECTED
               </span>
               <button
                 type="button"
-                onClick={() => setSelectedPoint(null)}
-                style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "14px" }}
+                onClick={() => setSelectedLocation(null)}
+                style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "14px", padding: 0 }}
               >
                 ✕
               </button>
             </div>
-            <div style={{ fontSize: "13px", color: "#e2e8f0", marginBottom: "6px" }}>
-              Latitude: <strong>{selectedPoint.lat.toFixed(6)}</strong><br />
-              Longitude: <strong>{selectedPoint.lng.toFixed(6)}</strong>
-            </div>
-            <div style={{ fontSize: "18px", fontWeight: "700", color: selectedPoint.risk >= 0.75 ? "#ef4444" : "#eab308" }}>
-              Risk Rating: {(selectedPoint.risk * 100).toFixed(1)}%
+            <h3 style={{ margin: "0 0 2px 0", fontSize: "18px", color: "#ffffff" }}>
+              {selectedLocation.name}
+            </h3>
+            <span style={{ fontSize: "12px", color: "#94a3b8" }}>{selectedLocation.state}</span>
+            <div style={{ marginTop: "10px", display: "flex", alignItems: "baseline", gap: "6px" }}>
+              <span style={{ fontSize: "12px", color: "#cbd5e1" }}>Landslide Risk:</span>
+              <strong
+                style={{
+                  fontSize: "20px",
+                  color: selectedLocation.baseRisk >= 0.7 ? "#ef4444" : selectedLocation.baseRisk >= 0.5 ? "#f97316" : "#f59e0b",
+                }}
+              >
+                {Math.round(selectedLocation.baseRisk * 100)}%
+              </strong>
             </div>
           </div>
         )}
+
+        {/* =====================================================
+            BOTTOM HORIZONTAL GRADIENT LEGEND (MATCHING IMAGE 2 REFERENCE)
+        ===================================================== */}
+        <div className="heat-bottom-legend">
+          <div className="heat-legend-title">
+            <span>🔥 Landslide Risk Intensity</span>
+          </div>
+          <div className="heat-legend-bar" />
+          <div className="heat-legend-ticks">
+            <span>0% (Low)</span>
+            <span>35% (Moderate)</span>
+            <span>65% (High)</span>
+            <span>100% (Severe)</span>
+          </div>
+        </div>
 
         {/* LOADING OVERLAY */}
         {loading && (
@@ -508,7 +472,7 @@ function Heatmap() {
               backdropFilter: "blur(14px)",
               border: "1px solid rgba(255,255,255,0.15)",
               borderRadius: "14px",
-              padding: "18px 28px",
+              padding: "16px 26px",
               color: "#ffffff",
               fontWeight: "600",
             }}
@@ -522,7 +486,7 @@ function Heatmap() {
           <div
             style={{
               position: "absolute",
-              top: "20px",
+              top: "70px",
               left: "50%",
               transform: "translateX(-50%)",
               zIndex: 1000,
@@ -530,7 +494,7 @@ function Heatmap() {
               backdropFilter: "blur(14px)",
               border: "1px solid rgba(248,113,113,0.5)",
               borderRadius: "12px",
-              padding: "14px 22px",
+              padding: "12px 20px",
               color: "#ffffff",
               textAlign: "center",
             }}
@@ -540,26 +504,6 @@ function Heatmap() {
             <small>{error}</small>
           </div>
         )}
-      </div>
-
-      {/* BOTTOM SUMMARY STATS */}
-      <div
-        style={{
-          maxWidth: "1400px",
-          margin: "18px auto 0",
-          padding: "0 20px",
-          display: "flex",
-          gap: "24px",
-          flexWrap: "wrap",
-          color: "#94a3b8",
-          fontSize: "13px",
-        }}
-      >
-        <span>🔵 Low (&lt;25%): <strong>{metrics.lowCount}</strong></span>
-        <span>🟡 Medium (25-49%): <strong>{metrics.moderateCount}</strong></span>
-        <span>🟠 High (50-74%): <strong>{metrics.highCount}</strong></span>
-        <span>🔴 Critical (&ge;75%): <strong style={{ color: "#ef4444" }}>{metrics.criticalCount}</strong></span>
-        <span>📍 Total Averaged Predictions: <strong>{metrics.total.toLocaleString()}</strong></span>
       </div>
     </section>
   );
