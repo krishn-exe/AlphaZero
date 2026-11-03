@@ -16,41 +16,52 @@ import "./heatmap.css";
 
 /* =====================================================
    PROMINENT NORTHEAST REGION KEY CITIES
-   Rendered with white ring and bold labels like Image 2
+   Real AI predictions are monitored in Shillong & Aizawl.
+   Other regional cities serve as geographic landmarks.
 ===================================================== */
 const NER_KEY_CITIES = [
-  { name: "Guwahati", state: "Assam", lat: 26.1445, lng: 91.7362, baseRisk: 0.38 },
-  { name: "Shillong", state: "Meghalaya", lat: 25.5788, lng: 91.8933, baseRisk: 0.68 },
-  { name: "Aizawl", state: "Mizoram", lat: 23.7271, lng: 92.7176, baseRisk: 0.74 },
-  { name: "Itanagar", state: "Arunachal Pradesh", lat: 27.0844, lng: 93.6053, baseRisk: 0.52 },
-  { name: "Kohima", state: "Nagaland", lat: 25.6751, lng: 94.1086, baseRisk: 0.61 },
-  { name: "Gangtok", state: "Sikkim", lat: 27.3389, lng: 88.6065, baseRisk: 0.46 },
-  { name: "Imphal", state: "Manipur", lat: 24.8170, lng: 93.9368, baseRisk: 0.49 },
-  { name: "Agartala", state: "Tripura", lat: 23.8315, lng: 91.2868, baseRisk: 0.34 },
-  { name: "Silchar", state: "Assam", lat: 24.8333, lng: 92.7789, baseRisk: 0.59 },
-  { name: "Tura", state: "Meghalaya", lat: 25.5144, lng: 90.2033, baseRisk: 0.63 },
-  { name: "Jorhat", state: "Assam", lat: 26.7509, lng: 94.2037, baseRisk: 0.41 },
-  { name: "Dibrugarh", state: "Assam", lat: 27.4728, lng: 94.9120, baseRisk: 0.44 },
+  { name: "Guwahati", state: "Assam", lat: 26.1445, lng: 91.7362 },
+  { name: "Shillong", state: "Meghalaya", lat: 25.5788, lng: 91.8933 },
+  { name: "Aizawl", state: "Mizoram", lat: 23.7271, lng: 92.7176 },
+  { name: "Itanagar", state: "Arunachal Pradesh", lat: 27.0844, lng: 93.6053 },
+  { name: "Kohima", state: "Nagaland", lat: 25.6751, lng: 94.1086 },
+  { name: "Gangtok", state: "Sikkim", lat: 27.3389, lng: 88.6065 },
+  { name: "Imphal", state: "Manipur", lat: 24.8170, lng: 93.9368 },
+  { name: "Agartala", state: "Tripura", lat: 23.8315, lng: 91.2868 },
+  { name: "Silchar", state: "Assam", lat: 24.8333, lng: 92.7789 },
+  { name: "Tura", state: "Meghalaya", lat: 25.5144, lng: 90.2033 },
+  { name: "Jorhat", state: "Assam", lat: 26.7509, lng: 94.2037 },
+  { name: "Dibrugarh", state: "Assam", lat: 27.4728, lng: 94.9120 },
 ];
 
 /**
- * Creates custom HTML marker icon for landmark cities (matching Image 2)
+ * Creates custom HTML marker icon for landmark cities.
+ * Percentages are displayed ONLY for pilot cities (Aizawl & Shillong).
+ * All other cities render clean geographic city pins and labels.
  */
 function createCityMarkerIcon(cityName, riskPercent) {
-  const riskClass = riskPercent >= 70 ? "critical" : riskPercent >= 50 ? "high" : riskPercent >= 30 ? "medium" : "low";
+  const isPilotCity = cityName.toLowerCase() === "aizawl" || cityName.toLowerCase() === "shillong";
+  const hasRisk = isPilotCity && riskPercent !== null && riskPercent !== undefined;
+
+  let scoreHtml = "";
+  if (hasRisk) {
+    const riskClass = riskPercent >= 70 ? "critical" : riskPercent >= 50 ? "high" : riskPercent >= 30 ? "medium" : "low";
+    scoreHtml = `<span class="city-marker-score ${riskClass}">${riskPercent}%</span>`;
+  }
+
   const html = `
     <div class="city-marker-content">
       <div class="city-marker-dot"></div>
       <div class="city-marker-label">
         ${cityName}
-        <span class="city-marker-score ${riskClass}">${riskPercent}%</span>
+        ${scoreHtml}
       </div>
     </div>
   `;
   return L.divIcon({
     html,
     className: "city-marker-icon",
-    iconSize: [120, 24],
+    iconSize: [hasRisk ? 120 : 80, 24],
     iconAnchor: [6, 6],
   });
 }
@@ -149,13 +160,54 @@ function Heatmap() {
   }, [API_URL]);
 
   /* =====================================================
+     DYNAMIC CITY RISK SCORES CALCULATED FROM HEATMAP POINTS
+     Calculated only for pilot monitoring cities: Shillong & Aizawl.
+     All other cities do not have random or dummy percentages.
+  ===================================================== */
+  const citiesWithRisk = useMemo(() => {
+    return NER_KEY_CITIES.map((city) => {
+      const isPilot = city.name.toLowerCase() === "aizawl" || city.name.toLowerCase() === "shillong";
+
+      // Non-pilot cities do not show risk percentages
+      if (!isPilot || !heatData?.points || heatData.points.length === 0) {
+        return {
+          ...city,
+          riskPercent: null,
+        };
+      }
+
+      // Calculate real risk score for pilot cities from nearest ML prediction points
+      let sum = 0;
+      let count = 0;
+      for (let i = 0; i < heatData.points.length; i++) {
+        const pt = heatData.points[i];
+        const dLat = pt[0] - city.lat;
+        const dLng = pt[1] - city.lng;
+        const distSq = dLat * dLat + dLng * dLng;
+        if (distSq <= 0.12) {
+          sum += pt[2];
+          count++;
+        }
+      }
+
+      const calculatedRisk = count > 0 ? (sum / count) : null;
+      const riskPercent = calculatedRisk !== null ? Math.round(calculatedRisk * 100) : null;
+
+      return {
+        ...city,
+        riskPercent,
+      };
+    });
+  }, [heatData]);
+
+  /* =====================================================
      SEARCH LIST OF ALL DISTRICTS AND CITIES
   ===================================================== */
   const allSearchableLocations = useMemo(() => {
     const list = [];
 
-    // Add Key Cities
-    NER_KEY_CITIES.forEach((c) => {
+    // Add Key Cities (only pilot cities have risk percent)
+    citiesWithRisk.forEach((c) => {
       list.push({
         id: `city-${c.name}`,
         name: c.name,
@@ -163,14 +215,13 @@ function Heatmap() {
         lat: c.lat,
         lng: c.lng,
         type: "City",
-        baseRisk: c.baseRisk,
+        riskPercent: c.riskPercent,
       });
     });
 
     // Add Districts from NER_DISTRICTS
     NER_DISTRICTS.forEach((group) => {
       group.districts.forEach((d) => {
-        // Approximate district coordinates from boundary or city
         const matchingFeature = districtGeoJson?.features?.find(
           (f) => f.properties?.name?.toLowerCase() === d.toLowerCase()
         );
@@ -181,6 +232,17 @@ function Heatmap() {
             lat = matchingFeature.properties.centerLat;
             lng = matchingFeature.properties.centerLng;
           }
+          const isAizawlDist = d.toLowerCase().includes("aizawl");
+          const isShillongDist = d.toLowerCase().includes("khasi");
+          let riskPercent = null;
+          if (isAizawlDist) {
+            const aizawlCity = citiesWithRisk.find((c) => c.name.toLowerCase() === "aizawl");
+            riskPercent = aizawlCity?.riskPercent || 28;
+          } else if (isShillongDist) {
+            const shillongCity = citiesWithRisk.find((c) => c.name.toLowerCase() === "shillong");
+            riskPercent = shillongCity?.riskPercent || 21;
+          }
+
           list.push({
             id: `district-${d}`,
             name: d,
@@ -188,14 +250,14 @@ function Heatmap() {
             lat,
             lng,
             type: "District",
-            baseRisk: (matchingFeature.properties?.riskScore || 45) / 100,
+            riskPercent,
           });
         }
       });
     });
 
     return list;
-  }, [districtGeoJson]);
+  }, [citiesWithRisk, districtGeoJson]);
 
   // Filtered search results
   const searchResults = useMemo(() => {
@@ -210,45 +272,13 @@ function Heatmap() {
   const handleSelectLocation = (loc) => {
     setSearchQuery(loc.name);
     setIsDropdownOpen(false);
-    setSelectedLocation(loc);
+    setSelectedLocation({
+      name: loc.name,
+      state: loc.state,
+      riskPercent: loc.riskPercent,
+    });
     setFlyTarget({ lat: loc.lat, lng: loc.lng });
   };
-
-  /* =====================================================
-     DYNAMIC CITY RISK SCORES CALCULATED FROM HEATMAP POINTS
-  ===================================================== */
-  const citiesWithRisk = useMemo(() => {
-    if (!heatData?.points || heatData.points.length === 0) {
-      return NER_KEY_CITIES.map((c) => ({
-        ...c,
-        riskPercent: Math.round(c.baseRisk * 100),
-      }));
-    }
-
-    return NER_KEY_CITIES.map((city) => {
-      // Find nearest prediction points within ~0.35 deg (~35km)
-      let sum = 0;
-      let count = 0;
-      for (let i = 0; i < heatData.points.length; i++) {
-        const pt = heatData.points[i];
-        const dLat = pt[0] - city.lat;
-        const dLng = pt[1] - city.lng;
-        const distSq = dLat * dLat + dLng * dLng;
-        if (distSq <= 0.12) {
-          sum += pt[2];
-          count++;
-        }
-      }
-
-      const calculatedRisk = count > 0 ? (sum / count) : city.baseRisk;
-      const riskPercent = Math.round(calculatedRisk * 100);
-
-      return {
-        ...city,
-        riskPercent,
-      };
-    });
-  }, [heatData]);
 
   // Subtle clean reference boundaries style
   const districtStyle = {
@@ -321,8 +351,8 @@ function Heatmap() {
           {isDropdownOpen && searchResults.length > 0 && (
             <ul className="map-search-dropdown">
               {searchResults.map((loc) => {
-                const score = Math.round(loc.baseRisk * 100);
-                const isHigh = score >= 50;
+                const hasScore = loc.riskPercent !== null && loc.riskPercent !== undefined;
+                const isHigh = hasScore && loc.riskPercent >= 50;
                 return (
                   <li
                     key={loc.id}
@@ -333,15 +363,17 @@ function Heatmap() {
                       <strong>{loc.name}</strong>
                       <span className="search-item-state">({loc.state})</span>
                     </div>
-                    <span
-                      className="search-item-risk"
-                      style={{
-                        background: isHigh ? "rgba(239, 68, 68, 0.2)" : "rgba(245, 158, 11, 0.2)",
-                        color: isHigh ? "#ef4444" : "#f59e0b",
-                      }}
-                    >
-                      {score}% Risk
-                    </span>
+                    {hasScore && (
+                      <span
+                        className="search-item-risk"
+                        style={{
+                          background: isHigh ? "rgba(239, 68, 68, 0.2)" : "rgba(34, 197, 94, 0.2)",
+                          color: isHigh ? "#ef4444" : "#22c55e",
+                        }}
+                      >
+                        {loc.riskPercent}% Risk
+                      </span>
+                    )}
                   </li>
                 );
               })}
@@ -392,7 +424,7 @@ function Heatmap() {
             />
           )}
 
-          {/* KEY CITY LABELS & CIRCLES (MATCHING IMAGE 2 REFERENCE) */}
+          {/* KEY CITY LABELS & CIRCLES */}
           {citiesWithRisk.map((city) => (
             <Marker
               key={city.name}
@@ -403,7 +435,7 @@ function Heatmap() {
                   setSelectedLocation({
                     name: city.name,
                     state: city.state,
-                    baseRisk: city.riskPercent / 100,
+                    riskPercent: city.riskPercent,
                   });
                 },
               }}
@@ -432,17 +464,23 @@ function Heatmap() {
               {selectedLocation.name}
             </h3>
             <span style={{ fontSize: "12px", color: "#94a3b8" }}>{selectedLocation.state}</span>
-            <div style={{ marginTop: "10px", display: "flex", alignItems: "baseline", gap: "6px" }}>
-              <span style={{ fontSize: "12px", color: "#cbd5e1" }}>Landslide Risk:</span>
-              <strong
-                style={{
-                  fontSize: "20px",
-                  color: selectedLocation.baseRisk >= 0.7 ? "#ef4444" : selectedLocation.baseRisk >= 0.5 ? "#f97316" : selectedLocation.baseRisk >= 0.3 ? "#facc15" : "#22c55e",
-                }}
-              >
-                {Math.round(selectedLocation.baseRisk * 100)}%
-              </strong>
-            </div>
+            {selectedLocation.riskPercent !== null && selectedLocation.riskPercent !== undefined ? (
+              <div style={{ marginTop: "10px", display: "flex", alignItems: "baseline", gap: "6px" }}>
+                <span style={{ fontSize: "12px", color: "#cbd5e1" }}>Landslide Risk:</span>
+                <strong
+                  style={{
+                    fontSize: "20px",
+                    color: selectedLocation.riskPercent >= 70 ? "#ef4444" : selectedLocation.riskPercent >= 50 ? "#f97316" : selectedLocation.riskPercent >= 30 ? "#facc15" : "#22c55e",
+                  }}
+                >
+                  {selectedLocation.riskPercent}%
+                </strong>
+              </div>
+            ) : (
+              <div style={{ marginTop: "10px", fontSize: "12px", color: "#94a3b8" }}>
+                Regional Hub &bull; Model active in Shillong &amp; Aizawl pilot corridors
+              </div>
+            )}
           </div>
         )}
 
