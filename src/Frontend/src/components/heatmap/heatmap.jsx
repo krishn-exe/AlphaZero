@@ -4,6 +4,8 @@ import {
   MapContainer,
   TileLayer,
   GeoJSON,
+  CircleMarker,
+  Tooltip,
   useMap,
 } from "react-leaflet";
 import L from "leaflet";
@@ -12,15 +14,11 @@ import "leaflet/dist/leaflet.css";
 import "leaflet-control-geocoder";
 import "leaflet-control-geocoder/dist/Control.Geocoder.css";
 
-import {
-  featureCollection,
-  polygon,
-  union,
-  difference,
-} from "@turf/turf";
+import { HeatmapLayer } from "../../utils/leafletHeat";
+import "./heatmap.css";
 
 /* =====================================================
-   GEOCODER
+   GEOCODER COMPONENT
 ===================================================== */
 function Geocoder({ position = "topright" }) {
   const map = useMap();
@@ -40,154 +38,70 @@ function Geocoder({ position = "topright" }) {
 }
 
 /* =====================================================
-   RISK CONFIG
-===================================================== */
-const RISK_CONFIG = {
-  low: {
-    color: "#22c55e",
-    label: "Low",
-  },
-  medium: {
-    color: "#eab308",
-    label: "Medium",
-  },
-  high: {
-    color: "#f97316",
-    label: "High",
-  },
-  severe: {
-    color: "#ef4444",
-    label: "Severe",
-  },
-};
-
-/* =====================================================
-   GET RISK LEVEL
-===================================================== */
-function getRiskLevel(riskLevel, riskScore) {
-  const level = riskLevel?.toLowerCase();
-  if (RISK_CONFIG[level]) {
-    return level;
-  }
-
-  const score = Number(riskScore) || 0;
-  if (score < 25) return "low";
-  if (score < 50) return "medium";
-  if (score < 75) return "high";
-  return "severe";
-}
-
-function getRiskConfig(riskLevel, riskScore) {
-  const level = getRiskLevel(riskLevel, riskScore);
-  return {
-    ...RISK_CONFIG[level],
-    level,
-  };
-}
-
-/* =====================================================
-   DATE FORMATTER
-===================================================== */
-function formatDate(date, notAvailableText = "Not available") {
-  if (!date) {
-    return notAvailableText;
-  }
-  const parsedDate = new Date(date);
-  if (Number.isNaN(parsedDate.getTime())) {
-    return date;
-  }
-  return parsedDate.toLocaleString();
-}
-
-/* =====================================================
-   MAIN HEATMAP
+   MAIN HEATMAP COMPONENT
 ===================================================== */
 function Heatmap() {
   const { t, i18n } = useTranslation();
 
-  const [riskData, setRiskData] = useState(null);
-  const [outsideNER, setOutsideNER] = useState(null);
-  const [selectedDistrict, setSelectedDistrict] = useState(null);
+  // Heatmap Controls State (Matches Image 2 GIS controls)
+  const [radius, setRadius] = useState(28);
+  const [opacity, setOpacity] = useState(0.85);
+  const [blur, setBlur] = useState(18);
+  const [showHeatmap, setShowHeatmap] = useState(true);
+  const [showHotspots, setShowHotspots] = useState(false);
+  const [showDistricts, setShowDistricts] = useState(true);
+
+  // Data states
+  const [heatData, setHeatData] = useState(null); // { updatedAt, slot, stats, points: [[lat, lng, risk], ...] }
+  const [districtGeoJson, setDistrictGeoJson] = useState(null);
+  const [selectedPoint, setSelectedPoint] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const API_URL =
     import.meta.env.VITE_API_URL ||
-    (''.replace(/\/+$/, '')); // Empty default resolves to current host
+    ("".replace(/\/+$/, "")); // Empty default resolves to current origin
 
   /* =====================================================
-     FETCH NATIONAL RISK DATA
+     FETCH REAL AGGREGATED HEATMAP PREDICTIONS & BOUNDARIES
   ===================================================== */
   useEffect(() => {
     const controller = new AbortController();
 
-    async function fetchRiskData() {
+    async function loadData() {
       try {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API_URL}/api/map/national`, {
+        // 1. Fetch the real aggregated AI predictions (generated after collision handling & averaging)
+        const heatRes = await fetch(`${API_URL}/api/predictions/heatmap`, {
           signal: controller.signal,
         });
 
-        if (!response.ok) {
-          throw new Error(`Risk API error: ${response.status}`);
+        if (!heatRes.ok) {
+          throw new Error(`Failed to load predictions: ${heatRes.status}`);
         }
 
-        const contentType = response.headers.get("content-type") || "";
-        if (!contentType.includes("application/json")) {
-          const text = await response.text();
-          console.error("Expected JSON but received:", text.substring(0, 300));
-          throw new Error("Server returned invalid data");
-        }
+        const heatJson = await heatRes.json();
+        setHeatData(heatJson);
 
-        const data = await response.json();
-
-        if (
-          !data ||
-          data.type !== "FeatureCollection" ||
-          !Array.isArray(data.features)
-        ) {
-          throw new Error("Invalid GeoJSON data received");
-        }
-
-        setRiskData(data);
-
-        /* =============================================
-           CREATE OUTSIDE NER MASK
-        ============================================= */
+        // 2. Fetch district boundary geometries for reference outlines
         try {
-          const districts = featureCollection(data.features);
-          const nerUnion = union(districts);
-
-          if (!nerUnion) {
-            throw new Error("Could not union districts");
+          const districtRes = await fetch(`${API_URL}/api/map/national`, {
+            signal: controller.signal,
+          });
+          if (districtRes.ok) {
+            const geoJson = await districtRes.json();
+            if (geoJson?.type === "FeatureCollection") {
+              setDistrictGeoJson(geoJson);
+            }
           }
-
-          const world = polygon([
-            [
-              [-180, -85],
-              [180, -85],
-              [180, 85],
-              [-180, 85],
-              [-180, -85],
-            ],
-          ]);
-
-          const mask = difference(
-            featureCollection([world, nerUnion])
-          );
-
-          if (mask) {
-            setOutsideNER(mask);
-          }
-        } catch (turfError) {
-          console.warn("Could not create outside mask:", turfError);
-          setOutsideNER(null);
+        } catch (geoErr) {
+          console.warn("Could not load district boundary outlines:", geoErr);
         }
       } catch (err) {
         if (err.name !== "AbortError") {
-          console.error("Risk data error:", err);
+          console.error("Heatmap data load error:", err);
           setError(err.message);
         }
       } finally {
@@ -195,7 +109,7 @@ function Heatmap() {
       }
     }
 
-    fetchRiskData();
+    loadData();
 
     return () => {
       controller.abort();
@@ -203,102 +117,112 @@ function Heatmap() {
   }, [API_URL]);
 
   /* =====================================================
-     CALCULATE REGION STATISTICS
+     CALCULATE METRICS & CRITICAL HOTSPOTS
   ===================================================== */
-  const stats = useMemo(() => {
-    const result = {
-      total: 0,
-      low: 0,
-      medium: 0,
-      high: 0,
-      severe: 0,
-    };
-
-    if (!riskData?.features) {
-      return result;
+  const metrics = useMemo(() => {
+    if (!heatData?.points || heatData.points.length === 0) {
+      return {
+        total: 0,
+        maxRisk: 0,
+        avgRisk: 0,
+        criticalCount: 0,
+        highCount: 0,
+        moderateCount: 0,
+        lowCount: 0,
+        hotspots: [],
+      };
     }
 
-    result.total = riskData.features.length;
+    let maxRisk = 0;
+    let sumRisk = 0;
+    let criticalCount = 0; // >= 0.75
+    let highCount = 0;     // 0.50 - 0.74
+    let moderateCount = 0; // 0.25 - 0.49
+    let lowCount = 0;      // < 0.25
+    const hotspots = [];
 
-    riskData.features.forEach((feature) => {
-      const properties = feature.properties || {};
-      const level = getRiskLevel(properties.riskLevel, properties.riskScore);
-      if (result[level] !== undefined) {
-        result[level]++;
+    for (let i = 0; i < heatData.points.length; i++) {
+      const p = heatData.points[i];
+      const risk = p[2];
+      sumRisk += risk;
+      if (risk > maxRisk) maxRisk = risk;
+
+      if (risk >= 0.75) {
+        criticalCount++;
+        hotspots.push(p);
+      } else if (risk >= 0.5) {
+        highCount++;
+        if (risk >= 0.70) hotspots.push(p);
+      } else if (risk >= 0.25) {
+        moderateCount++;
+      } else {
+        lowCount++;
       }
-    });
+    }
 
-    return result;
-  }, [riskData]);
-
-  /* =====================================================
-     DISTRICT STYLE
-  ===================================================== */
-  function districtStyle(feature) {
-    const properties = feature?.properties || {};
-    const risk = getRiskConfig(properties.riskLevel, properties.riskScore);
+    const total = heatData.points.length;
+    const avgRisk = total > 0 ? (sumRisk / total) : 0;
 
     return {
-      color: "#111827",
-      weight: 1,
-      fillColor: risk.color,
-      fillOpacity: 0.7,
+      total,
+      maxRisk: Number(maxRisk.toFixed(4)),
+      avgRisk: Number(avgRisk.toFixed(4)),
+      criticalCount,
+      highCount,
+      moderateCount,
+      lowCount,
+      hotspots: hotspots.slice(0, 50), // top critical hotspots for markers
     };
-  }
+  }, [heatData]);
 
   /* =====================================================
-     DISTRICT INTERACTION
+     DISTRICT REFERENCE OUTLINES STYLE
   ===================================================== */
-  function onEachDistrict(feature, layer) {
-    const properties = feature.properties || {};
-    const risk = getRiskConfig(properties.riskLevel, properties.riskScore);
+  const districtStyle = {
+    color: "#475569",
+    weight: 1,
+    fillColor: "#0f172a",
+    fillOpacity: 0.05,
+    dashArray: "3, 3",
+  };
 
-    const districtName = t(`districts.${properties.name}`, { defaultValue: properties.name || "Unknown" });
-    const stateName = t(`states.${properties.state}`, { defaultValue: properties.state || "" });
-    const riskLabel = t(`heatmap.levels.${risk.level}`, { defaultValue: risk.label });
-    const riskWord = t('heatmap.risk', { defaultValue: 'Risk' });
+  const onEachDistrict = (feature, layer) => {
+    const props = feature.properties || {};
+    const districtName = t(`districts.${props.name}`, { defaultValue: props.name || "District" });
+    const stateName = t(`states.${props.state}`, { defaultValue: props.state || "" });
 
-    /* Click */
-    layer.on("click", () => {
-      setSelectedDistrict(properties);
-    });
-
-    /* Hover */
     layer.on("mouseover", () => {
       layer.setStyle({
-        weight: 3,
-        color: "#ffffff",
-        fillOpacity: 0.9,
+        weight: 2,
+        color: "#38bdf8",
+        fillOpacity: 0.12,
+        dashArray: "",
       });
-      layer.bringToFront();
     });
 
-    /* Mouse out */
     layer.on("mouseout", () => {
-      layer.setStyle(districtStyle(feature));
+      layer.setStyle(districtStyle);
     });
 
-    /* Tooltip */
     layer.bindTooltip(`
-      <div style="font-family: Arial, sans-serif; min-width: 130px;">
+      <div style="font-family: Arial, sans-serif; min-width: 110px;">
         <strong>${districtName}</strong><br/>
-        <span>${stateName}</span><br/><br/>
-        <strong>${riskWord}:</strong> ${Math.round(Number(properties.riskScore) || 0)}/100<br/>
-        <span style="color:${risk.color}; font-weight:bold;">${riskLabel.toUpperCase()}</span>
+        <span style="color:#94a3b8; font-size:12px;">${stateName}</span>
       </div>
     `);
-  }
+  };
 
-  /* =====================================================
-     SELECTED RISK CONFIG
-  ===================================================== */
-  const selectedRisk = selectedDistrict
-    ? getRiskConfig(selectedDistrict.riskLevel, selectedDistrict.riskScore)
-    : null;
+  const resetControls = () => {
+    setRadius(28);
+    setOpacity(0.85);
+    setBlur(18);
+    setShowHeatmap(true);
+    setShowHotspots(false);
+  };
 
   return (
     <section style={{ width: "100%", background: "#09090b", padding: "24px 0" }}>
-      {/* TITLE */}
+      {/* TITLE & HEADER */}
       <div style={{ maxWidth: "1400px", margin: "0 auto 18px", padding: "0 20px" }}>
         <p
           style={{
@@ -321,74 +245,255 @@ function Heatmap() {
         </p>
       </div>
 
-      {/* MAP WRAPPER */}
-      <div
-        style={{
-          position: "relative",
-          width: "100%",
-          height: "72vh",
-          minHeight: "600px",
-          overflow: "hidden",
-          borderTop: "1px solid #27272a",
-          borderBottom: "1px solid #27272a",
-        }}
-      >
+      {/* MAP CONTAINER */}
+      <div className="heatmap-wrapper">
         <MapContainer
-          center={[26.2, 92.8]}
-          zoom={7}
+          center={[25.7, 92.2]}
+          zoom={8}
           minZoom={6}
-          maxZoom={12}
-          maxBounds={[
-            [21, 87],
-            [30, 99],
-          ]}
-          maxBoundsViscosity={1}
+          maxZoom={14}
           scrollWheelZoom={false}
-          style={{
-            height: "100%",
-            width: "100%",
-            zIndex: 1,
-          }}
+          style={{ height: "100%", width: "100%", zIndex: 1 }}
         >
-          {/* OPENSTREETMAP */}
+          {/* Base Map: OpenStreetMap */}
           <TileLayer
-            attribution="&copy; OpenStreetMap contributors"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          {/* TERRAIN */}
-          <TileLayer
-            attribution="&copy; Esri"
-            url={`https://ibasemaps-api.arcgis.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}?token=${import.meta.env.VITE_ARCGIS_API_KEY}`}
-            opacity={0.55}
-          />
-
-          {/* OUTSIDE MASK */}
-          {outsideNER && (
+          {/* Reference District Boundary Outlines */}
+          {showDistricts && districtGeoJson && (
             <GeoJSON
-              data={outsideNER}
-              interactive={false}
-              style={{
-                color: "#000000",
-                weight: 0,
-                fillColor: "#000000",
-                fillOpacity: 0.72,
-              }}
-            />
-          )}
-
-          {/* RISK DISTRICTS — reloads on language change so tooltips update */}
-          {riskData && (
-            <GeoJSON
-              key={`${i18n.language}-${riskData.features.length}`}
-              data={riskData}
+              key={`${i18n.language}-${districtGeoJson.features?.length}`}
+              data={districtGeoJson}
               style={districtStyle}
               onEachFeature={onEachDistrict}
             />
           )}
 
+          {/* REAL PREDICTION HEATMAP LAYER */}
+          {showHeatmap && heatData?.points && heatData.points.length > 0 && (
+            <HeatmapLayer
+              points={heatData.points}
+              radius={radius}
+              blur={blur}
+              opacity={opacity}
+              max={1.0}
+            />
+          )}
+
+          {/* OPTIONAL CRITICAL HOTSPOTS HIGHLIGHT MARKERS */}
+          {showHotspots &&
+            metrics.hotspots.map((pt, idx) => (
+              <CircleMarker
+                key={`hotspot-${idx}`}
+                center={[pt[0], pt[1]]}
+                radius={7}
+                pathOptions={{
+                  color: "#ffffff",
+                  weight: 2,
+                  fillColor: "#ef4444",
+                  fillOpacity: 0.95,
+                }}
+                eventHandlers={{
+                  click: () => {
+                    setSelectedPoint({ lat: pt[0], lng: pt[1], risk: pt[2] });
+                  },
+                }}
+              >
+                <Tooltip direction="top" offset={[0, -6]}>
+                  <div style={{ textAlign: "center", fontSize: "11px" }}>
+                    <strong>🚨 Hotspot</strong><br />
+                    <span>Risk: <strong>{(pt[2] * 100).toFixed(1)}%</strong></span><br />
+                    <small>{pt[0].toFixed(4)}, {pt[1].toFixed(4)}</small>
+                  </div>
+                </Tooltip>
+              </CircleMarker>
+            ))}
+
           <Geocoder position="topright" />
         </MapContainer>
+
+        {/* =====================================================
+            FLOATING CONTROLS PANEL (Matches User's Reference Image)
+        ===================================================== */}
+        <div className="heat-controls-panel">
+          <div className="heat-panel-header">
+            <h4 className="heat-panel-title">
+              <span className="heat-icon">🔥</span> HEAT MAPPING
+            </h4>
+            <span className="heat-badge-slot">
+              {heatData?.slot && heatData.slot !== 'none' ? `Slot: ${heatData.slot}` : 'LIVE'}
+            </span>
+          </div>
+
+          {/* Radius Slider */}
+          <div className="heat-control-group">
+            <div className="heat-slider-label">
+              <span>Radius</span>
+              <span className="heat-slider-val">{radius}px</span>
+            </div>
+            <input
+              type="range"
+              min={10}
+              max={60}
+              value={radius}
+              onChange={(e) => setRadius(Number(e.target.value))}
+              className="heat-slider"
+            />
+          </div>
+
+          {/* Opacity Slider */}
+          <div className="heat-control-group">
+            <div className="heat-slider-label">
+              <span>Opacity</span>
+              <span className="heat-slider-val">{Math.round(opacity * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min={20}
+              max={100}
+              value={Math.round(opacity * 100)}
+              onChange={(e) => setOpacity(Number(e.target.value) / 100)}
+              className="heat-slider"
+            />
+          </div>
+
+          {/* Blur / Diffusion Slider */}
+          <div className="heat-control-group">
+            <div className="heat-slider-label">
+              <span>Blur & Diffusion</span>
+              <span className="heat-slider-val">{blur}px</span>
+            </div>
+            <input
+              type="range"
+              min={5}
+              max={40}
+              value={blur}
+              onChange={(e) => setBlur(Number(e.target.value))}
+              className="heat-slider"
+            />
+          </div>
+
+          {/* Density Gradient Spectrum */}
+          <div className="gradient-bar-container">
+            <div className="gradient-bar" />
+            <div className="gradient-labels">
+              <span>Low (0.0)</span>
+              <span>Moderate</span>
+              <span>Severe (1.0)</span>
+            </div>
+          </div>
+
+          {/* Risk Levels Legend (Real Data) */}
+          <div className="heat-legend-list">
+            <div className="heat-legend-item">
+              <div>
+                <span className="legend-color-dot" style={{ background: "#ef4444" }} />
+                <span>Critical / Severe (&ge; 0.75)</span>
+              </div>
+              <strong style={{ color: "#ef4444" }}>{metrics.criticalCount}</strong>
+            </div>
+            <div className="heat-legend-item">
+              <div>
+                <span className="legend-color-dot" style={{ background: "#f97316" }} />
+                <span>High Risk (0.50 – 0.74)</span>
+              </div>
+              <strong style={{ color: "#f97316" }}>{metrics.highCount}</strong>
+            </div>
+            <div className="heat-legend-item">
+              <div>
+                <span className="legend-color-dot" style={{ background: "#eab308" }} />
+                <span>Medium (0.25 – 0.49)</span>
+              </div>
+              <strong style={{ color: "#eab308" }}>{metrics.moderateCount}</strong>
+            </div>
+            <div className="heat-legend-item">
+              <div>
+                <span className="legend-color-dot" style={{ background: "#3b82f6" }} />
+                <span>Low (&lt; 0.25)</span>
+              </div>
+              <strong style={{ color: "#38bdf8" }}>{metrics.lowCount}</strong>
+            </div>
+          </div>
+
+          {/* Layer Toggles */}
+          <div className="heat-toggles">
+            <label className="heat-toggle-row">
+              <span>Heatmap Density Layer</span>
+              <input
+                type="checkbox"
+                checked={showHeatmap}
+                onChange={(e) => setShowHeatmap(e.target.checked)}
+              />
+            </label>
+
+            <label className="heat-toggle-row">
+              <span>District Outlines</span>
+              <input
+                type="checkbox"
+                checked={showDistricts}
+                onChange={(e) => setShowDistricts(e.target.checked)}
+              />
+            </label>
+
+            <label className="heat-toggle-row">
+              <span>Highlight Severe Hotspots</span>
+              <input
+                type="checkbox"
+                checked={showHotspots}
+                onChange={(e) => setShowHotspots(e.target.checked)}
+              />
+            </label>
+
+            <button type="button" className="btn-reset-heat" onClick={resetControls}>
+              Reset Controls
+            </button>
+          </div>
+        </div>
+
+        {/* TOP RIGHT LIVE STATS CARD */}
+        <div className="heat-stats-card">
+          <div className="stat-column">
+            <span className="stat-label">Model Grid Points</span>
+            <span className="stat-val">{metrics.total.toLocaleString()}</span>
+          </div>
+          <div className="stat-column">
+            <span className="stat-label">Max Risk</span>
+            <span className={`stat-val ${metrics.maxRisk >= 0.75 ? "critical" : "moderate"}`}>
+              {(metrics.maxRisk * 100).toFixed(1)}%
+            </span>
+          </div>
+          <div className="stat-column">
+            <span className="stat-label">Avg Saturation</span>
+            <span className="stat-val">{(metrics.avgRisk * 100).toFixed(1)}%</span>
+          </div>
+        </div>
+
+        {/* POINT INSPECTOR (When hotspot is clicked) */}
+        {selectedPoint && (
+          <div className="heat-inspector-card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+              <span style={{ fontSize: "11px", color: "#38bdf8", fontWeight: "700", letterSpacing: "1px" }}>
+                COORDINATE INSPECTOR
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedPoint(null)}
+                style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "14px" }}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ fontSize: "13px", color: "#e2e8f0", marginBottom: "6px" }}>
+              Latitude: <strong>{selectedPoint.lat.toFixed(6)}</strong><br />
+              Longitude: <strong>{selectedPoint.lng.toFixed(6)}</strong>
+            </div>
+            <div style={{ fontSize: "18px", fontWeight: "700", color: selectedPoint.risk >= 0.75 ? "#ef4444" : "#eab308" }}>
+              Risk Rating: {(selectedPoint.risk * 100).toFixed(1)}%
+            </div>
+          </div>
+        )}
 
         {/* LOADING OVERLAY */}
         {loading && (
@@ -399,7 +504,7 @@ function Heatmap() {
               left: "50%",
               transform: "translate(-50%, -50%)",
               zIndex: 1000,
-              background: "rgba(15, 23, 42, 0.85)",
+              background: "rgba(15, 23, 42, 0.88)",
               backdropFilter: "blur(14px)",
               border: "1px solid rgba(255,255,255,0.15)",
               borderRadius: "14px",
@@ -408,7 +513,7 @@ function Heatmap() {
               fontWeight: "600",
             }}
           >
-            {t('heatmap.loading', 'Loading live risk data...')}
+            {t('heatmap.loading', 'Loading live AI risk heatmap...')}
           </div>
         )}
 
@@ -435,312 +540,26 @@ function Heatmap() {
             <small>{error}</small>
           </div>
         )}
-
-        {/* REGION OVERVIEW */}
-        <div
-          style={{
-            position: "absolute",
-            top: "20px",
-            left: "20px",
-            zIndex: 1000,
-            width: "240px",
-            background: "rgba(15, 23, 42, 0.78)",
-            backdropFilter: "blur(18px)",
-            WebkitBackdropFilter: "blur(18px)",
-            border: "1px solid rgba(255,255,255,0.16)",
-            borderRadius: "16px",
-            padding: "18px",
-            color: "#ffffff",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.35)",
-          }}
-        >
-          <p
-            style={{
-              color: "#22c55e",
-              fontSize: "11px",
-              letterSpacing: "1.5px",
-              fontWeight: "700",
-              margin: "0 0 8px",
-            }}
-          >
-            {t('heatmap.regionOverview', 'REGION OVERVIEW')}
-          </p>
-
-          <h3 style={{ margin: "0 0 8px", fontSize: "20px" }}>
-            {t('heatmap.northeastIndia', 'Northeast India')}
-          </h3>
-
-          <p
-            style={{
-              color: "#cbd5e1",
-              fontSize: "13px",
-              lineHeight: "1.5",
-              marginBottom: "16px",
-            }}
-          >
-            {t('heatmap.monitoringDesc', 'Monitoring landslide risk across active regions.')}
-          </p>
-
-          <div
-            style={{
-              borderTop: "1px solid rgba(255,255,255,0.12)",
-              paddingTop: "12px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <span style={{ color: "#94a3b8", fontSize: "13px" }}>
-              {t('heatmap.totalRegions', 'Total Regions')}
-            </span>
-
-            <strong style={{ fontSize: "24px", color: "#ffffff" }}>
-              {stats.total}
-            </strong>
-          </div>
-        </div>
-
-        {/* RISK LEGEND */}
-        <div
-          style={{
-            position: "absolute",
-            left: "20px",
-            bottom: "25px",
-            zIndex: 1000,
-            width: "210px",
-            background: "rgba(15, 23, 42, 0.82)",
-            backdropFilter: "blur(18px)",
-            WebkitBackdropFilter: "blur(18px)",
-            border: "1px solid rgba(255,255,255,0.16)",
-            borderRadius: "16px",
-            padding: "18px",
-            color: "#ffffff",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.35)",
-          }}
-        >
-          <h3 style={{ margin: "0 0 16px", fontSize: "17px" }}>
-            {t('heatmap.riskLevels', 'Risk Levels')}
-          </h3>
-
-          {[
-            {
-              level: "low",
-              label: t('heatmap.levels.low', 'Low'),
-              range: "0 – 24",
-            },
-            {
-              level: "medium",
-              label: t('heatmap.levels.medium', 'Medium'),
-              range: "25 – 49",
-            },
-            {
-              level: "high",
-              label: t('heatmap.levels.high', 'High'),
-              range: "50 – 74",
-            },
-            {
-              level: "severe",
-              label: t('heatmap.levels.severe', 'Severe'),
-              range: "75 – 100",
-            },
-          ].map((item) => (
-            <div
-              key={item.level}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: "12px",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
-                <span
-                  style={{
-                    width: "10px",
-                    height: "10px",
-                    borderRadius: "50%",
-                    background: RISK_CONFIG[item.level].color,
-                    display: "inline-block",
-                  }}
-                />
-                <span style={{ fontSize: "13px" }}>{item.label}</span>
-              </div>
-              <span style={{ color: "#94a3b8", fontSize: "12px" }}>{item.range}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* SELECTED DISTRICT PANEL */}
-        <div
-          style={{
-            position: "absolute",
-            right: "20px",
-            bottom: "25px",
-            zIndex: 1000,
-            width: "300px",
-            background: "rgba(15, 23, 42, 0.84)",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            border: "1px solid rgba(255,255,255,0.16)",
-            borderRadius: "18px",
-            padding: "20px",
-            color: "#ffffff",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-          }}
-        >
-          {!selectedDistrict && (
-            <>
-              <p
-                style={{
-                  color: "#22c55e",
-                  fontSize: "11px",
-                  letterSpacing: "1.5px",
-                  fontWeight: "700",
-                  margin: "0 0 8px",
-                }}
-              >
-                {t('heatmap.districtInfo', 'DISTRICT INFORMATION')}
-              </p>
-
-              <h3 style={{ margin: "0 0 10px" }}>
-                {t('heatmap.selectRegion', 'Select a Region')}
-              </h3>
-
-              <p style={{ color: "#94a3b8", fontSize: "13px", lineHeight: "1.6", margin: 0 }}>
-                {t('heatmap.selectRegionPrompt', 'Click on any coloured district to view its landslide risk details.')}
-              </p>
-            </>
-          )}
-
-          {selectedDistrict && (
-            <>
-              {/* TITLE */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  marginBottom: "18px",
-                }}
-              >
-                <div>
-                  <p
-                    style={{
-                      color: "#22c55e",
-                      fontSize: "10px",
-                      letterSpacing: "1.5px",
-                      fontWeight: "700",
-                      margin: "0 0 6px",
-                    }}
-                  >
-                    {t('heatmap.selectedRegion', 'SELECTED REGION')}
-                  </p>
-
-                  <h3 style={{ margin: "0 0 5px", fontSize: "22px" }}>
-                    {t(`districts.${selectedDistrict.name}`, { defaultValue: selectedDistrict.name })}
-                  </h3>
-
-                  <span style={{ color: "#94a3b8", fontSize: "13px" }}>
-                    {t(`states.${selectedDistrict.state}`, { defaultValue: selectedDistrict.state })}
-                  </span>
-                </div>
-
-                <span
-                  style={{
-                    background: `${selectedRisk.color}25`,
-                    color: selectedRisk.color,
-                    border: `1px solid ${selectedRisk.color}55`,
-                    borderRadius: "20px",
-                    padding: "5px 10px",
-                    fontSize: "10px",
-                    fontWeight: "700",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {t(`heatmap.levels.${selectedRisk.level}`, { defaultValue: selectedRisk.label })}
-                </span>
-              </div>
-
-              {/* RISK SCORE */}
-              <div
-                style={{
-                  background: "rgba(255,255,255,0.07)",
-                  borderRadius: "12px",
-                  padding: "14px",
-                  marginBottom: "14px",
-                }}
-              >
-                <span style={{ color: "#94a3b8", fontSize: "12px" }}>
-                  {t('heatmap.riskScore', 'RISK SCORE')}
-                </span>
-
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "baseline",
-                    gap: "5px",
-                    marginTop: "4px",
-                  }}
-                >
-                  <strong style={{ fontSize: "34px", color: selectedRisk.color }}>
-                    {Math.round(Number(selectedDistrict.riskScore) || 0)}
-                  </strong>
-                  <span style={{ color: "#94a3b8", fontSize: "14px" }}>/100</span>
-                </div>
-              </div>
-
-              {/* RAINFALL */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  padding: "10px 0",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                }}
-              >
-                <span style={{ color: "#94a3b8", fontSize: "13px" }}>
-                  {t('heatmap.rainfall', 'Rainfall')}
-                </span>
-                <strong style={{ fontSize: "13px" }}>
-                  {selectedDistrict.rainfall ?? t('heatmap.na', 'N/A')}
-                  {selectedDistrict.rainfall != null && " mm"}
-                </strong>
-              </div>
-
-              {/* UPDATED */}
-              <div style={{ paddingTop: "12px" }}>
-                <span style={{ color: "#64748b", fontSize: "11px" }}>
-                  {t('heatmap.lastUpdated', 'LAST UPDATED')}
-                </span>
-                <p style={{ margin: "5px 0 0", fontSize: "12px", color: "#cbd5e1" }}>
-                  {formatDate(
-                    selectedDistrict.lastUpdated || selectedDistrict.computedAt,
-                    t('heatmap.na', 'N/A')
-                  )}
-                </p>
-              </div>
-            </>
-          )}
-        </div>
       </div>
 
-      {/* BOTTOM SUMMARY */}
+      {/* BOTTOM SUMMARY STATS */}
       <div
         style={{
           maxWidth: "1400px",
           margin: "18px auto 0",
           padding: "0 20px",
           display: "flex",
-          gap: "20px",
+          gap: "24px",
           flexWrap: "wrap",
           color: "#94a3b8",
           fontSize: "13px",
         }}
       >
-        <span>🟢 {t('heatmap.levels.low', 'Low')}: {stats.low}</span>
-        <span>🟡 {t('heatmap.levels.medium', 'Medium')}: {stats.medium}</span>
-        <span>🟠 {t('heatmap.levels.high', 'High')}: {stats.high}</span>
-        <span>🔴 {t('heatmap.levels.severe', 'Severe')}: {stats.severe}</span>
+        <span>🔵 Low (&lt;25%): <strong>{metrics.lowCount}</strong></span>
+        <span>🟡 Medium (25-49%): <strong>{metrics.moderateCount}</strong></span>
+        <span>🟠 High (50-74%): <strong>{metrics.highCount}</strong></span>
+        <span>🔴 Critical (&ge;75%): <strong style={{ color: "#ef4444" }}>{metrics.criticalCount}</strong></span>
+        <span>📍 Total Averaged Predictions: <strong>{metrics.total.toLocaleString()}</strong></span>
       </div>
     </section>
   );

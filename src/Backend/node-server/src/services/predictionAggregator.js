@@ -243,7 +243,32 @@ async function aggregateSlotPredictions({
   await fs.promises.writeFile(latestPath, csvString, 'utf-8');
   await fs.promises.writeFile(latestFinalPath, csvString, 'utf-8');
 
-  // 4. Save metadata summary
+  // 4. Generate JSON format for Leaflet heatmap (array of [lat, lng, risk])
+  const pointsArray = finalRecords.map((r) => [r.Latitude, r.Longitude, r.Risk_Rating]);
+  const risks = finalRecords.map((r) => r.Risk_Rating);
+  const minRisk = risks.length > 0 ? Math.min(...risks) : 0;
+  const maxRisk = risks.length > 0 ? Math.max(...risks) : 0;
+  const avgRisk = risks.length > 0 ? Number((risks.reduce((a, b) => a + b, 0) / risks.length).toFixed(4)) : 0;
+
+  const heatJson = {
+    updatedAt: new Date().toISOString(),
+    slot: formattedSlot,
+    date: dateStr,
+    stats: {
+      ...stats,
+      minRisk,
+      maxRisk,
+      avgRisk,
+    },
+    points: pointsArray,
+  };
+
+  const slotFinalJsonPath = path.join(slotDir, 'final_predictions.json');
+  const latestFinalJsonPath = path.join(baseDir, 'latest_final_predictions.json');
+  await fs.promises.writeFile(slotFinalJsonPath, JSON.stringify(heatJson), 'utf-8');
+  await fs.promises.writeFile(latestFinalJsonPath, JSON.stringify(heatJson), 'utf-8');
+
+  // 5. Save metadata summary
   const meta = {
     date: dateStr,
     slot: formattedSlot,
@@ -255,27 +280,115 @@ async function aggregateSlotPredictions({
   await fs.promises.writeFile(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
 
   console.log(
-    `[AIML Aggregator] Slot ${formattedSlot} (${dateStr}): Merged ${stats.totalInputFiles} files into 1 CSV. Unique points: ${stats.uniquePoints}, Overlaps averaged: ${stats.collisionsAveraged}`
+    `[AIML Aggregator] Slot ${formattedSlot} (${dateStr}): Merged ${stats.totalInputFiles} files into 1 CSV/JSON. Unique points: ${stats.uniquePoints}, Overlaps averaged: ${stats.collisionsAveraged}`
   );
 
   return {
     status: 'ok',
-    message: 'CSV aggregation completed successfully',
+    message: 'CSV and JSON aggregation completed successfully',
     date: dateStr,
     slot: formattedSlot,
     inputFiles: candidateFiles.length,
     stats,
     outputs: {
       slotFinal: slotFinalPath,
+      slotFinalJson: slotFinalJsonPath,
       dateFinal: dateFinalPath,
       latest: latestPath,
+      latestJson: latestFinalJsonPath,
       metadata: metaPath,
     },
   };
+}
+
+/**
+ * Retrieves the latest aggregated predictions in JSON format for the heatmap.
+ * If no aggregated files exist yet in storage, loads and aggregates from real ML model
+ * predicted_risk_output.csv as a reliable baseline.
+ */
+async function getLatestAggregatedJson(baseStorageDir) {
+  const baseDir =
+    baseStorageDir ||
+    process.env.PREDICTIONS_STORAGE_DIR ||
+    path.join(__dirname, '../../storage/predictions');
+
+  const jsonPath = path.join(baseDir, 'latest_final_predictions.json');
+
+  // 1. Return cached JSON if already aggregated
+  if (fs.existsSync(jsonPath)) {
+    try {
+      const data = await fs.promises.readFile(jsonPath, 'utf-8');
+      return JSON.parse(data);
+    } catch (err) {
+      console.warn('[Aggregator] Could not read latest_final_predictions.json:', err);
+    }
+  }
+
+  // 2. Check for latest_final_predictions.csv
+  const finalCsvPath = path.join(baseDir, 'latest_final_predictions.csv');
+  const legacyCsvPath = path.join(baseDir, 'latest_predictions.csv');
+  let targetCsv = fs.existsSync(finalCsvPath) ? finalCsvPath : (fs.existsSync(legacyCsvPath) ? legacyCsvPath : null);
+
+  // 3. Fallback to real ML model prediction output
+  if (!targetCsv) {
+    const candidates = [
+      path.join(__dirname, '../../Container/Heat/ML-model/predicted_risk_output.csv'),
+      path.join(__dirname, '../../../Container/Heat/ML-model/predicted_risk_output.csv'),
+      path.join(__dirname, '../../test_predictions.csv'),
+    ];
+    for (const c of candidates) {
+      if (fs.existsSync(c)) {
+        targetCsv = c;
+        break;
+      }
+    }
+  }
+
+  if (!targetCsv || !fs.existsSync(targetCsv)) {
+    return {
+      updatedAt: new Date().toISOString(),
+      slot: 'none',
+      stats: { totalPoints: 0, uniquePoints: 0, maxRisk: 0, avgRisk: 0 },
+      points: [],
+    };
+  }
+
+  // Parse and aggregate target CSV
+  const csvContent = await fs.promises.readFile(targetCsv, 'utf-8');
+  const { records, stats } = aggregateCsvFiles([csvContent]);
+
+  const pointsArray = records.map((r) => [r.Latitude, r.Longitude, r.Risk_Rating]);
+  const risks = records.map((r) => r.Risk_Rating);
+  const minRisk = risks.length > 0 ? Math.min(...risks) : 0;
+  const maxRisk = risks.length > 0 ? Math.max(...risks) : 0;
+  const avgRisk = risks.length > 0 ? Number((risks.reduce((a, b) => a + b, 0) / risks.length).toFixed(4)) : 0;
+
+  const result = {
+    updatedAt: new Date().toISOString(),
+    slot: 'latest',
+    stats: {
+      ...stats,
+      minRisk,
+      maxRisk,
+      avgRisk,
+    },
+    points: pointsArray,
+  };
+
+  // Cache to disk
+  try {
+    await fs.promises.mkdir(baseDir, { recursive: true });
+    await fs.promises.writeFile(jsonPath, JSON.stringify(result), 'utf-8');
+  } catch (err) {
+    console.warn('[Aggregator] Could not write cache json:', err);
+  }
+
+  return result;
 }
 
 module.exports = {
   parseCsvRows,
   aggregateCsvFiles,
   aggregateSlotPredictions,
+  getLatestAggregatedJson,
 };

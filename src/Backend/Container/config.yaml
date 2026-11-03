@@ -58,5 +58,6 @@ output:
 # ── Server Push ───────────────────────────────────────────────────────────────
 
 server:
-  url: "https://land-slide-sih26.onrender.com/api/map/national"
-  api_key: "814fc16bd6f035710cc3fa0156f53291f11540e713d7456f"
+  url: "https://krishn.tech/api/map/national"
+  api_key: ""  # Loaded from AIML_API_KEY in .env (or config fallback)
+  bypass_time: false

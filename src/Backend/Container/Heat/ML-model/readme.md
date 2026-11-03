@@ -1,23 +1,28 @@
-# Landslide Risk ML Model
+# Landslide Risk Prediction Models
 
-## Model v2 (Calibrated Probabilistic Inference)
-The active production model is `landslide_model_v2.pkl`, loaded and evaluated via `landslide_predict.py` and `predict.py`.
+## Active Production Model
+* **Model File**: `New model/landslide_risk_regressor.pkl` (local replica at `Heat/ML-model/landslide_risk_regressor.pkl`)
+* **Architecture**: `XGBRegressor` (`objective="reg:logistic"`, `eval_metric="rmse"`) + `QuantileTransformer` uniformizer.
+* **Outputs**:
+  - `Raw_Score`: Sigmoid output directly in `(0, 1)` representing empirical probability of landslide occurrence.
+  - `Risk_Rating`: Uniformized percentile rank in `[0.0000, 1.0000]` calibrated against the validation distribution.
+* **Feature Interactions**: Automatically computes `Rainfall_Slope_Interaction` and `Saturation_Slope_Interaction`.
 
-### Key Features & Architecture:
-* **Calibrated Probability [0.0, 1.0]**: Combines an XGBoost classifier with Platt calibration (`calibrator`) over logit-transformed raw probabilities to yield well-calibrated continuous risk scores.
-* **Feature Interactions**: Automatically generates `Rainfall_Slope_Interaction` and `Saturation_Slope_Interaction`.
-* **Output Attributes**:
-  - `Risk_Rating` / `landslide_score`: Calibrated risk probability between 0.0000 and 1.0000.
-  - `risk_level`: Low / Moderate / High / Critical.
-  - `landslide_predicted`: Binary alert flag (1 if score >= calibrated threshold, else 0).
-  - `hours_to_landslide`: Time-to-failure horizon estimation.
+## Retired Models
+* **Model v1 (Legacy Binary Classifier)**: Moved to `Heat/ML-model/legacy/landslide_model_v1.pkl`.
+  - Used binary 0/1 training objective with raw `predict_proba`.
+  - Retired due to uncalibrated probability skew and lack of interaction terms.
 
-### Execution:
-* Standalone batch prediction:
+## Running Inference
+* Standalone script:
   ```bash
   .venv\Scripts\python.exe Heat/ML-model/predict.py
   ```
-* Daemon pipeline orchestrator:
+  or directly from `New model`:
+  ```bash
+  .venv\Scripts\python.exe "New model/predict.py" data/output.csv predictions.csv
+  ```
+* Daemon pipeline:
   ```bash
   .venv\Scripts\python.exe Heat/run.py --daemon
   ```

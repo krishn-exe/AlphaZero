@@ -17,6 +17,7 @@ Usage
 """
 
 import logging
+import os
 import sys
 import time
 from datetime import datetime, timedelta
@@ -37,22 +38,49 @@ SCRIPT_DIR = Path(__file__).resolve().parent          # Heat/
 CONTAINER_DIR = SCRIPT_DIR.parent                     # Container/
 LIVEDATA_DIR = CONTAINER_DIR / "LiveData"
 ML_MODEL_DIR = SCRIPT_DIR / "ML-model"
+NEW_MODEL_DIR = CONTAINER_DIR / "New model"
 
 sys.path.insert(0, str(LIVEDATA_DIR))
+sys.path.insert(0, str(NEW_MODEL_DIR))
 sys.path.insert(0, str(ML_MODEL_DIR))
 from time_utils import get_current_ist_time
-from landslide_predict import build_features, predict as v2_predict
 
 IST = ZoneInfo("Asia/Kolkata")
 logger = logging.getLogger("run")
 
 # ==============================================================================
-# Configuration
+# Configuration & Environment
 # ==============================================================================
 
 
+def init_env():
+    """Load environment variables from Container/.env."""
+    env_file = CONTAINER_DIR / ".env"
+    if not env_file.exists():
+        return
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(env_file)
+    except Exception:
+        pass
+
+    # Robust fallback line parser if dotenv failed or missing
+    try:
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    k, v = k.strip(), v.strip().strip("'\"")
+                    if k and k not in os.environ:
+                        os.environ[k] = v
+    except Exception as exc:
+        logger.warning(f"Failed to parse .env file: {exc}")
+
+
 def load_config(config_path: str | None = None) -> dict:
-    """Load config.yaml from Container/ (or an explicit path)."""
+    """Load config.yaml from Container/ (or explicit path) and merge environment variables."""
+    init_env()
     if config_path:
         path = Path(config_path)
     else:
@@ -62,13 +90,32 @@ def load_config(config_path: str | None = None) -> dict:
         logger.error(f"Config file not found: {path.resolve()}")
         sys.exit(1)
 
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     # Resolve relative output directory against CONTAINER_DIR
     out_dir = Path(config["output"]["directory"])
     if not out_dir.is_absolute():
         config["output"]["directory"] = str((CONTAINER_DIR / out_dir).resolve())
+
+    # Environment variables override/populate server configuration
+    server_cfg = config.setdefault("server", {})
+
+    env_api_key = os.environ.get("AIML_API_KEY") or os.environ.get("API_KEY")
+    if env_api_key:
+        server_cfg["api_key"] = env_api_key
+
+    env_api_url = os.environ.get("API_URL")
+    if env_api_url:
+        server_cfg["url"] = env_api_url
+    elif not server_cfg.get("url"):
+        server_cfg["url"] = "https://krishn.tech/api/map/national"
+
+    env_bypass = os.environ.get("BYPASS_TIME_WINDOW", "").strip().lower()
+    if env_bypass in ("true", "1", "yes"):
+        server_cfg["bypass_time"] = True
+    elif "bypass_time" not in server_cfg:
+        server_cfg["bypass_time"] = False
 
     return config
 
@@ -89,10 +136,10 @@ def run_data_pipeline(config: dict, *, fresh: bool = False) -> pd.DataFrame:
 # Phase 2: ML Prediction
 # ==============================================================================
 
-# Model artifact paths (Model v2 calibrated artifact prioritized over legacy)
-MODEL_V2_PATH = ML_MODEL_DIR / "landslide_model_v2.pkl"
-MODEL_LEGACY_PATH = ML_MODEL_DIR / "landslide_model.pkl"
-MODEL_PATH = MODEL_V2_PATH if MODEL_V2_PATH.exists() else MODEL_LEGACY_PATH
+# Active model is the new risk regressor located in the "New model" folder
+ACTIVE_MODEL_PATH = NEW_MODEL_DIR / "landslide_risk_regressor.pkl"
+FALLBACK_MODEL_PATH = ML_MODEL_DIR / "landslide_risk_regressor.pkl"
+MODEL_PATH = ACTIVE_MODEL_PATH if ACTIVE_MODEL_PATH.exists() else FALLBACK_MODEL_PATH
 
 
 def load_model(model_path: Path | None = None):
@@ -101,15 +148,22 @@ def load_model(model_path: Path | None = None):
     if not target_path.exists():
         logger.error(f"Model file not found: {target_path}")
         sys.exit(1)
-    model = joblib.load(target_path)
-    if isinstance(model, dict):
+    artifact = joblib.load(target_path)
+    if isinstance(artifact, dict) and "model" in artifact:
+        model_obj = artifact["model"]
+        features = artifact.get("features", [])
         logger.info(
-            f"Calibrated ML model artifact loaded: {target_path.name} "
-            f"({len(model.get('features', []))} features, threshold={model.get('threshold', 0.5):.4f})"
+            f"Active risk regressor loaded from {target_path} "
+            f"({len(features)} features, {type(model_obj).__name__})"
+        )
+    elif isinstance(artifact, dict) and "clf" in artifact:
+        logger.info(
+            f"Calibrated classifier artifact loaded: {target_path.name} "
+            f"({len(artifact.get('features', []))} features)"
         )
     else:
-        logger.info(f"Legacy ML model loaded: {target_path.name}")
-    return model
+        logger.info(f"Legacy model loaded: {target_path.name}")
+    return artifact
 
 
 def run_prediction(model, output_csv: Path) -> pd.DataFrame:
@@ -122,20 +176,38 @@ def run_prediction(model, output_csv: Path) -> pd.DataFrame:
     df = pd.read_csv(output_csv)
     logger.info(f"Prediction input: {len(df)} rows from {output_csv.name}")
 
-    if isinstance(model, dict):
-        # Model v2: Calibrated continuous probabilistic model artifact with Platt scaling
+    if isinstance(model, dict) and "model" in model:
+        # Active Model: XGBoost Regressor directly predicting continuous values [0, 1]
+        # Feature interactions
+        if "Rainfall_mm" in df.columns and "Slope_Angle" in df.columns:
+            df["Rainfall_Slope_Interaction"] = df["Rainfall_mm"] * df["Slope_Angle"]
+        if "Soil_Saturation" in df.columns and "Slope_Angle" in df.columns:
+            df["Saturation_Slope_Interaction"] = df["Soil_Saturation"] * df["Slope_Angle"]
+
+        features = model["features"]
+        X_new = df[features].replace([np.inf, -np.inf], np.nan)
+
+        # Regressor with reg:logistic directly gives probability output in (0, 1)
+        raw_prob = model["model"].predict(X_new)
+        # Uniformizer maps to calibrated percentile risk rating in [0, 1]
+        risk_rating = model["uniformizer"].transform(raw_prob.reshape(-1, 1)).ravel()
+
+        risk_ratings = np.round(np.clip(risk_rating, 0.0, 1.0), 4)
+        raw_scores = np.round(np.clip(raw_prob, 0.0, 1.0), 4)
+
+        df["Risk_Rating"] = risk_ratings
+        df["Raw_Score"] = raw_scores
+
+        logger.info(
+            f"Regressor inference complete: {len(df)} rows | "
+            f"Risk_Rating mean={risk_ratings.mean():.4f}, min={risk_ratings.min():.4f}, max={risk_ratings.max():.4f} | "
+            f"Raw_Score mean={raw_scores.mean():.4f}"
+        )
+    elif isinstance(model, dict) and "clf" in model:
+        from landslide_predict import predict as v2_predict
         res = v2_predict(df, model)
         risk_ratings = res["landslide_score"].values
         df["Risk_Rating"] = risk_ratings
-        df["landslide_score"] = risk_ratings
-        if "risk_level" in res.columns:
-            df["risk_level"] = res["risk_level"].values
-        if "landslide_predicted" in res.columns:
-            df["landslide_predicted"] = res["landslide_predicted"].values
-        logger.info(
-            f"V2 inference complete: {len(df)} rows evaluated | "
-            f"Risk_Rating mean={risk_ratings.mean():.4f}, min={risk_ratings.min():.4f}, max={risk_ratings.max():.4f}"
-        )
     else:
         # Legacy fallback: raw XGBoost classifier
         feature_df = df.drop(columns=["Latitude", "Longitude", "Fetch_Timestamp"], errors="ignore")
@@ -186,16 +258,31 @@ def push_to_server(predictions: pd.DataFrame, server_config: dict) -> bool:
     """
     POST the predictions to the remote server as a multipart form upload.
 
+    Endpoint: POST /api/map/national (or /api/map/predictions, /api/predictions)
+    Hosted at: https://krishn.tech
+
     Form fields:
-        key   -- API key / identifier (from config)
+        key   -- API key (loaded from AIML_API_KEY in .env)
         time  -- ISO timestamp when predictions were generated
-    File:
-        data  -- CSV file with Latitude, Longitude, Risk_Rating
+    Files:
+        file  -- CSV file with Latitude, Longitude, Risk_Rating
+        data  -- (alias for file field)
+
+    Authentication methods (sent concurrently for full compatibility):
+        - Form field: key
+        - Header: x-api-key
+        - Header: Authorization: Bearer <key>
 
     Returns True on success, False on failure.
     """
-    url = server_config["url"]
-    api_key = server_config.get("api_key", "")
+    url = server_config.get("url", "https://krishn.tech/api/map/national")
+    api_key = server_config.get("api_key", "").strip()
+    bypass_time = server_config.get("bypass_time", False)
+
+    if bypass_time and "bypass_time=true" not in url:
+        delim = "&" if "?" in url else "?"
+        url = f"{url}{delim}bypass_time=true"
+
     finish_time = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST")
 
     # Convert DataFrame to CSV string for upload
@@ -205,12 +292,15 @@ def push_to_server(predictions: pd.DataFrame, server_config: dict) -> bool:
         "key": (None, api_key),
         "time": (None, finish_time),
     }
+    # Send under both 'file' and 'data' aliases for full backend compatibility
     files = {
+        "file": ("predictions.csv", csv_content, "text/csv"),
         "data": ("predictions.csv", csv_content, "text/csv"),
     }
 
     headers = {}
     if api_key:
+        headers["x-api-key"] = api_key
         headers["Authorization"] = f"Bearer {api_key}"
 
     max_retries = 3
@@ -218,9 +308,12 @@ def push_to_server(predictions: pd.DataFrame, server_config: dict) -> bool:
         try:
             logger.info(f"POST attempt {attempt}/{max_retries} → {url}")
             resp = requests.post(url, data=form_data, files=files, headers=headers, timeout=60)
-            resp.raise_for_status()
-            logger.info(f"Server responded: {resp.status_code} ({len(resp.content)} bytes)")
-            return True
+            if resp.status_code in (200, 201):
+                logger.info(f"Server upload successful: {resp.status_code} ({len(resp.content)} bytes) - {resp.text[:300]}")
+                return True
+            else:
+                logger.warning(f"Server returned status {resp.status_code}: {resp.text}")
+                resp.raise_for_status()
         except requests.exceptions.RequestException as exc:
             logger.warning(f"Attempt {attempt} failed: {exc}")
             if attempt < max_retries:
@@ -360,6 +453,10 @@ def main():
         "--dry-run", action="store_true",
         help="Show configuration and grid info without fetching",
     )
+    parser.add_argument(
+        "--bypass-time", action="store_true",
+        help="Append bypass_time=true to the API URL for testing outside IST schedule windows",
+    )
     args = parser.parse_args()
 
     # Setup logging
@@ -370,6 +467,8 @@ def main():
     )
 
     config = load_config(args.config)
+    if args.bypass_time:
+        config["server"]["bypass_time"] = True
 
     # Dry run -- delegate to the pipeline's own dry-run
     if args.dry_run:

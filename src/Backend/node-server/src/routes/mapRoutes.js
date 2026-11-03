@@ -6,6 +6,7 @@ const {
   receivePredictions,
   triggerManualAggregation,
   getLatestFinalCsv,
+  getHeatmapPoints,
   getSchedulerStatusEndpoint,
 } = require('../controllers/predictionController');
 const {
@@ -23,6 +24,8 @@ const upload = multer({
 
 // Public reads — frontend hits these
 router.get('/national', getNationalHeatmap);
+router.get('/heatmap', getHeatmapPoints);
+router.get('/heatmap-points', getHeatmapPoints);
 router.get('/top-risk', getTopRiskDistricts);
 router.get('/stats', getRiskStats);
 router.get('/district/:id', getDistrictDetail);

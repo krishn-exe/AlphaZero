@@ -3,3 +3,4 @@ data/
 __pycache__/
 *.pyc
 predicted_risk_output.csv
+.env

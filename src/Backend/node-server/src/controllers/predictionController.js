@@ -4,6 +4,7 @@ const {
   aggregateSlotPredictions,
   aggregateCsvFiles,
   parseCsvRows,
+  getLatestAggregatedJson,
 } = require('../services/predictionAggregator');
 const {
   getSchedulerStatus,
@@ -323,6 +324,23 @@ function getSchedulerStatusEndpoint(req, res) {
   }
 }
 
+/**
+ * GET /api/predictions/heatmap
+ * GET /api/map/heatmap
+ *
+ * Serves the aggregated JSON file containing unique averaged [lat, lng, risk] points
+ * and model run statistics for the frontend heatmap.
+ */
+async function getHeatmapPoints(req, res) {
+  try {
+    const data = await getLatestAggregatedJson();
+    res.json(data);
+  } catch (err) {
+    console.error('getHeatmapPoints error:', err);
+    res.status(500).json({ error: 'Failed to load heatmap prediction points' });
+  }
+}
+
 module.exports = {
   getIstTime,
   checkIstScheduleWindow,
@@ -330,5 +348,6 @@ module.exports = {
   receivePredictions,
   triggerManualAggregation,
   getLatestFinalCsv,
+  getHeatmapPoints,
   getSchedulerStatusEndpoint,
 };
